@@ -22,6 +22,46 @@ export function DataProvider({ children }) {
     return user?.id ? storage.get(`schedule_${user.id}`, DEFAULT_WEEKLY_SCHEDULE) : DEFAULT_WEEKLY_SCHEDULE;
   });
 
+  const DEFAULT_CARDIO_ROUTINES = [
+    {
+      id: 'cardio_natacao',
+      name: 'Natação',
+      modality: 'Natação',
+      targetDuration: 40,
+      targetDistance: 1.5,
+      targetCalories: 350,
+      notes: 'Estilos crawl e costas intervalados',
+      scheduledDay: 1,
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: 'cardio_esteira',
+      name: 'Esteira (Caminhada / Corrida)',
+      modality: 'Esteira (Caminhada / Corrida)',
+      targetDuration: 30,
+      targetDistance: 4,
+      targetCalories: 280,
+      notes: 'Aquecimento 5 min caminhando + 25 min corrida',
+      scheduledDay: 3,
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: 'cardio_bike',
+      name: 'Bicicleta Ergométrica',
+      modality: 'Bicicleta Ergométrica',
+      targetDuration: 35,
+      targetDistance: 12,
+      targetCalories: 300,
+      notes: 'Giro moderado constante',
+      scheduledDay: 5,
+      createdAt: new Date().toISOString()
+    }
+  ];
+
+  const [cardioRoutines, setCardioRoutines] = useState(() => {
+    return user?.id ? storage.get(`cardioRoutines_${user.id}`, DEFAULT_CARDIO_ROUTINES) : DEFAULT_CARDIO_ROUTINES;
+  });
+
   const [activeWorkout, setActiveWorkout] = useState(() => {
     return user?.id ? storage.get(`activeWorkout_${user.id}`, null) : null;
   });
@@ -34,11 +74,13 @@ export function DataProvider({ children }) {
   useEffect(() => {
     if (user?.id) {
       setRoutines(storage.get(`routines_${user.id}`, []));
+      setCardioRoutines(storage.get(`cardioRoutines_${user.id}`, DEFAULT_CARDIO_ROUTINES));
       setCheckins(storage.get(`checkins_${user.id}`, []));
       setWeeklySchedule(storage.get(`schedule_${user.id}`, DEFAULT_WEEKLY_SCHEDULE));
       setActiveWorkout(storage.get(`activeWorkout_${user.id}`, null));
     } else {
       setRoutines([]);
+      setCardioRoutines(DEFAULT_CARDIO_ROUTINES);
       setCheckins([]);
       setWeeklySchedule(DEFAULT_WEEKLY_SCHEDULE);
       setActiveWorkout(null);
@@ -51,6 +93,12 @@ export function DataProvider({ children }) {
       storage.set(`routines_${user.id}`, routines);
     }
   }, [routines, user?.id]);
+
+  useEffect(() => {
+    if (user?.id) {
+      storage.set(`cardioRoutines_${user.id}`, cardioRoutines);
+    }
+  }, [cardioRoutines, user?.id]);
 
   useEffect(() => {
     if (user?.id) {
@@ -121,6 +169,60 @@ export function DataProvider({ children }) {
       };
       return [...prev, copy];
     });
+  }, []);
+
+  // ---- CARDIO ROUTINES ACTIONS ----
+  const addCardioRoutine = useCallback((routine) => {
+    const newRoutine = {
+      id: generateId(),
+      createdAt: new Date().toISOString(),
+      name: routine.name || 'Nova Rotina de Cardio',
+      modality: routine.modality || routine.name || 'Esteira (Caminhada / Corrida)',
+      targetDuration: Number(routine.targetDuration) || 30,
+      targetDistance: Number(routine.targetDistance) || 0,
+      targetCalories: Number(routine.targetCalories) || 0,
+      notes: routine.notes || '',
+      scheduledDay: routine.scheduledDay !== undefined && routine.scheduledDay !== '' && routine.scheduledDay !== null ? Number(routine.scheduledDay) : null,
+      ...routine
+    };
+    setCardioRoutines(prev => [...prev, newRoutine]);
+
+    // If scheduledDay is provided, also sync to weeklySchedule
+    if (newRoutine.scheduledDay !== null && newRoutine.scheduledDay !== undefined) {
+      setWeeklySchedule(prev => {
+        const existing = prev[newRoutine.scheduledDay] || { type: 'rest', label: 'Descanso' };
+        const hasW = Boolean(existing.hasWorkout || existing.type === 'workout' || existing.type === 'both');
+        const wLabel = existing.workoutLabel || (hasW ? existing.label : '');
+        return {
+          ...prev,
+          [newRoutine.scheduledDay]: {
+            ...existing,
+            hasCardio: true,
+            cardioLabel: newRoutine.name,
+            cardioRoutineId: newRoutine.id,
+            cardioDetails: {
+              modality: newRoutine.modality,
+              duration: newRoutine.targetDuration,
+              distance: newRoutine.targetDistance,
+              calories: newRoutine.targetCalories,
+              notes: newRoutine.notes
+            },
+            type: hasW ? 'both' : 'cardio',
+            label: hasW ? `${wLabel} + Cardio: ${newRoutine.name}` : `Cardio: ${newRoutine.name}`
+          }
+        };
+      });
+    }
+
+    return newRoutine;
+  }, []);
+
+  const updateCardioRoutine = useCallback((id, updates) => {
+    setCardioRoutines(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+  }, []);
+
+  const deleteCardioRoutine = useCallback((id) => {
+    setCardioRoutines(prev => prev.filter(c => c.id !== id));
   }, []);
 
   // ---- ACTIVE WORKOUT SESSION ----
@@ -695,6 +797,7 @@ export function DataProvider({ children }) {
   return (
     <DataContext.Provider value={{
       routines,
+      cardioRoutines,
       checkins,
       groups: myGroups,
       allGroups,
@@ -706,6 +809,9 @@ export function DataProvider({ children }) {
       updateRoutine,
       deleteRoutine,
       duplicateRoutine,
+      addCardioRoutine,
+      updateCardioRoutine,
+      deleteCardioRoutine,
       startActiveWorkout,
       updateActiveWorkout,
       cancelActiveWorkout,

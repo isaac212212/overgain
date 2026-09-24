@@ -1045,7 +1045,7 @@ export default function ProfilePage() {
                   <div className="history-user-info">
                     <Avatar src={user?.avatar} name={user?.name} size="sm" />
                     <div>
-                      <span className="history-username">{user?.username || 'isaac223344'}</span>
+                      <span className="history-username">{user?.username || 'joaosilva'}</span>
                       <span className="history-timestamp">{formatDateTime(item.date)} • Só você</span>
                     </div>
                   </div>

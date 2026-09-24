@@ -39,6 +39,7 @@ export default function DashboardPage() {
   const { 
     checkins, 
     routines, 
+    cardioRoutines,
     groups, 
     weeklySchedule, 
     logCardio, 
@@ -47,6 +48,28 @@ export default function DashboardPage() {
   } = useData();
   const stats = useFrequencyStats();
   const navigate = useNavigate();
+
+  // Integrated Cardio Timer state
+  const [cardioTimerSeconds, setCardioTimerSeconds] = useState(0);
+  const [isCardioTimerRunning, setIsCardioTimerRunning] = useState(false);
+
+  useEffect(() => {
+    let interval = null;
+    if (isCardioTimerRunning) {
+      interval = setInterval(() => {
+        setCardioTimerSeconds(prev => prev + 1);
+      }, 1000);
+    } else if (!isCardioTimerRunning && cardioTimerSeconds !== 0) {
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [isCardioTimerRunning, cardioTimerSeconds]);
+
+  const formatTimer = (totalSeconds) => {
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
 
   const today = new Date();
   const [viewDate, setViewDate] = useState(new Date());
@@ -203,22 +226,6 @@ export default function DashboardPage() {
             <ChevronRight size={22} className="hero-checkin-arrow" />
           </button>
 
-          {/* Cardio Button */}
-          <button 
-            className="hero-checkin-btn"
-            onClick={() => setIsCardioModalOpen(true)}
-            id="hero-start-cardio-button"
-            style={{ border: '1px solid rgba(245, 158, 11, 0.4)' }}
-          >
-            <div className="hero-checkin-icon-glow" style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
-              <span style={{ fontSize: '1.25rem' }}>🏃</span>
-            </div>
-            <div className="hero-checkin-text">
-              <span className="hero-checkin-label" style={{ color: '#f59e0b' }}>REGISTRAR CARDIO</span>
-              <span className="hero-checkin-sub">Opcional • Independente</span>
-            </div>
-            <ChevronRight size={22} className="hero-checkin-arrow" />
-          </button>
 
           {/* Adiar / Cancelar Treino de Hoje */}
           {todaySchedule?.type === 'workout' && !todayTrainedWorkout && !todayHasAbsence && (
@@ -318,43 +325,130 @@ export default function DashboardPage() {
               )}
 
               {/* 2. Cardio como Sub-Treino Organizado logo abaixo */}
-              {(todaySchedule?.hasCardio || todaySchedule?.type === 'cardio' || todaySchedule?.type === 'both' || todayTrainedCardio) && (
-                <div className="daily-schedule-cardio-box">
-                  <div className="daily-box-top">
-                    <div className="daily-box-title-group">
-                      <span className="daily-box-tag tag-cardio">🏃 [CARDIO / SUB-TREINO]</span>
-                      <h3 className="daily-box-name name-cardio">
-                        {todaySchedule?.cardioLabel || 'Sessão de Cardio'}
-                      </h3>
+              {(todaySchedule?.hasCardio || todaySchedule?.type === 'cardio' || todaySchedule?.type === 'both' || todayTrainedCardio) && (() => {
+                const matchedTodayCardio = (cardioRoutines || []).find(c => 
+                  c.scheduledDay === todayDayOfWeek || 
+                  (c.name && todaySchedule?.cardioLabel && c.name.toLowerCase().includes(todaySchedule.cardioLabel.toLowerCase()))
+                );
+                const cardioName = todaySchedule?.cardioLabel || matchedTodayCardio?.name || 'Sessão de Cardio';
+
+                return (
+                  <div className="daily-schedule-cardio-box">
+                    <div className="daily-box-top">
+                      <div className="daily-box-title-group">
+                        <span className="daily-box-tag tag-cardio">🏃 [CARDIO / SUB-TREINO]</span>
+                        <h3 className="daily-box-name name-cardio">
+                          {cardioName}
+                        </h3>
+                      </div>
+                      {todayTrainedCardio ? (
+                        <span className="daily-status-pill done">✅ Cardio Concluído</span>
+                      ) : (
+                        <span className="daily-status-pill pending-cardio">⏳ Pendente</span>
+                      )}
                     </div>
-                    {todayTrainedCardio ? (
-                      <span className="daily-status-pill done">✅ Cardio Concluído</span>
-                    ) : (
-                      <span className="daily-status-pill pending-cardio">⏳ Pendente</span>
+
+                    {/* Detalhes (Duração / Distância / Meta) */}
+                    <div style={{
+                      display: 'flex',
+                      gap: 14,
+                      flexWrap: 'wrap',
+                      fontSize: '0.8125rem',
+                      color: 'var(--text-secondary)',
+                      margin: '6px 0 10px 0'
+                    }}>
+                      <span>⏱️ <strong>Duração:</strong> {matchedTodayCardio?.targetDuration || 30} min</span>
+                      {matchedTodayCardio?.targetDistance > 0 && (
+                        <span>📏 <strong>Distância:</strong> {matchedTodayCardio.targetDistance} km</span>
+                      )}
+                      {matchedTodayCardio?.targetCalories > 0 && (
+                        <span>🔥 <strong>Meta:</strong> {matchedTodayCardio.targetCalories} kcal</span>
+                      )}
+                    </div>
+
+                    {matchedTodayCardio?.notes && (
+                      <p style={{ margin: '0 0 10px 0', fontSize: '0.8125rem', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+                        "{matchedTodayCardio.notes}"
+                      </p>
                     )}
-                  </div>
 
-                  <ul className="daily-exercises-list-preview">
-                    <li>• {todaySchedule?.cardioLabel || 'Esteira / Bicicleta / Natação / Corrida'}</li>
-                  </ul>
+                    {/* Cronômetro / Timer Integrado */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      background: 'rgba(245, 158, 11, 0.08)',
+                      padding: '10px 14px',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid rgba(245, 158, 11, 0.25)',
+                      marginBottom: 12,
+                      flexWrap: 'wrap',
+                      gap: 8
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#f59e0b', textTransform: 'uppercase' }}>
+                          ⏱️ CRONÔMETRO:
+                        </span>
+                        <span style={{ fontSize: '1.25rem', fontWeight: 900, fontFamily: 'monospace', color: '#f59e0b' }}>
+                          {formatTimer(cardioTimerSeconds)}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <Button 
+                          type="button"
+                          variant={isCardioTimerRunning ? "danger" : "secondary"}
+                          size="sm"
+                          onClick={() => setIsCardioTimerRunning(!isCardioTimerRunning)}
+                          style={{ minWidth: 70 }}
+                        >
+                          {isCardioTimerRunning ? 'Pausar' : 'Iniciar'}
+                        </Button>
+                        <Button 
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setIsCardioTimerRunning(false);
+                            setCardioTimerSeconds(0);
+                          }}
+                        >
+                          Zerar
+                        </Button>
+                      </div>
+                    </div>
 
-                  <div className="daily-box-footer">
-                    <Button 
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => {
-                        if (todaySchedule?.cardioLabel) {
-                          setCardioType(todaySchedule.cardioLabel.split(' ')[0] || 'Corrida');
-                        }
-                        setIsCardioModalOpen(true);
-                      }}
-                      style={{ borderColor: 'rgba(245, 158, 11, 0.4)', color: '#f59e0b' }}
-                    >
-                      {todayTrainedCardio ? "Registrar Novo Cardio" : "Bater Ponto Cardio"}
-                    </Button>
+                    <div className="daily-box-footer">
+                      <Button 
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          const timerMinutes = cardioTimerSeconds > 0 
+                            ? Math.max(1, Math.round(cardioTimerSeconds / 60)) 
+                            : (matchedTodayCardio?.targetDuration || 30);
+                          setCardioDuration(String(timerMinutes));
+
+                          if (matchedTodayCardio?.modality) {
+                            setCardioType(matchedTodayCardio.modality.split(' ')[0] || 'Corrida');
+                          } else if (todaySchedule?.cardioLabel) {
+                            setCardioType(todaySchedule.cardioLabel.split(' ')[0] || 'Corrida');
+                          }
+
+                          if (matchedTodayCardio?.targetDistance) {
+                            setCardioDistance(String(matchedTodayCardio.targetDistance));
+                          }
+                          if (matchedTodayCardio?.targetCalories) {
+                            setCardioCalories(String(matchedTodayCardio.targetCalories));
+                          }
+                          setIsCardioModalOpen(true);
+                        }}
+                        style={{ borderColor: 'rgba(245, 158, 11, 0.4)', color: '#f59e0b' }}
+                      >
+                        {todayTrainedCardio ? "Registrar Novo Cardio" : "Bater Ponto Cardio"}
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Descanso */}
               {todaySchedule?.type === 'rest' && !todaySchedule?.hasWorkout && !todaySchedule?.hasCardio && !todayTrainedWorkout && !todayTrainedCardio && (

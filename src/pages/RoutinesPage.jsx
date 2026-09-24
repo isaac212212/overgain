@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,7 +19,10 @@ import {
   Calendar,
   RotateCw,
   FolderPlus,
-  ClipboardList
+  ClipboardList,
+  Camera,
+  Upload,
+  Activity
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
@@ -57,11 +60,15 @@ const DAYS_OF_WEEK = [
 export default function RoutinesPage() {
   const { 
     routines, 
+    cardioRoutines,
     checkins,
     addRoutine, 
     updateRoutine, 
     deleteRoutine, 
     duplicateRoutine,
+    addCardioRoutine,
+    updateCardioRoutine,
+    deleteCardioRoutine,
     startActiveWorkout,
     weeklySchedule,
     updateWeeklySchedule,
@@ -79,12 +86,59 @@ export default function RoutinesPage() {
   const [editingRoutine, setEditingRoutine] = useState(null);
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [folderOpen, setFolderOpen] = useState(true);
+  const [cardioFolderOpen, setCardioFolderOpen] = useState(true);
 
   // Editor form state
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [formScheduledDay, setFormScheduledDay] = useState('');
   const [formExercises, setFormExercises] = useState([]);
+
+  // Cardio Editor form state
+  const [isCardioEditorOpen, setIsCardioEditorOpen] = useState(false);
+  const [editingCardio, setEditingCardio] = useState(null);
+  const [cardioFormName, setCardioFormName] = useState('');
+  const [cardioFormModality, setCardioFormModality] = useState('Natação');
+  const [cardioFormDuration, setCardioFormDuration] = useState('30');
+  const [cardioFormDistance, setCardioFormDistance] = useState('');
+  const [cardioFormCalories, setCardioFormCalories] = useState('');
+  const [cardioFormNotes, setCardioFormNotes] = useState('');
+  const [cardioFormScheduledDay, setCardioFormScheduledDay] = useState('');
+
+  // Cardio Checkin Modal in RoutinesPage
+  const [isCardioCheckinOpen, setIsCardioCheckinOpen] = useState(false);
+  const [checkinCardioName, setCheckinCardioName] = useState('');
+  const [checkinCardioModality, setCheckinCardioModality] = useState('Corrida');
+  const [checkinCardioDuration, setCheckinCardioDuration] = useState('30');
+  const [checkinCardioDistance, setCheckinCardioDistance] = useState('');
+  const [checkinCardioCalories, setCheckinCardioCalories] = useState('');
+  const [checkinCardioNotes, setCheckinCardioNotes] = useState('');
+  const [checkinCardioPhoto, setCheckinCardioPhoto] = useState(null);
+  const [checkinCardioShare, setCheckinCardioShare] = useState(true);
+  const [checkinCardioError, setCheckinCardioError] = useState('');
+  const cardioPhotoRef = useRef(null);
+
+  // Integrated Cardio Timer
+  const [cardioTimerSeconds, setCardioTimerSeconds] = useState(0);
+  const [isCardioTimerRunning, setIsCardioTimerRunning] = useState(false);
+
+  useEffect(() => {
+    let interval = null;
+    if (isCardioTimerRunning) {
+      interval = setInterval(() => {
+        setCardioTimerSeconds(prev => prev + 1);
+      }, 1000);
+    } else if (!isCardioTimerRunning && cardioTimerSeconds !== 0) {
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [isCardioTimerRunning, cardioTimerSeconds]);
+
+  const formatTimer = (totalSeconds) => {
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
 
   // Schedule form state
   const [tempSchedule, setTempSchedule] = useState(() => ({ ...weeklySchedule }));
@@ -133,23 +187,13 @@ export default function RoutinesPage() {
     return null;
   };
 
-  // Open editor for new routine
+  // Open editor for new routine (starts TOTALLY BLANK as requested)
   const handleOpenNewRoutine = () => {
     setEditingRoutine(null);
     setFormName('');
     setFormDescription('');
     setFormScheduledDay('');
-    setFormExercises([
-      {
-        id: generateId(),
-        muscleGroup: 'Peito',
-        name: '',
-        notes: '',
-        sets: [
-          { setNumber: 1, weight: 0, reps: 0 }
-        ]
-      }
-    ]);
+    setFormExercises([]); // Totally blank!
     setIsEditorOpen(true);
   };
 
@@ -162,6 +206,93 @@ export default function RoutinesPage() {
     setFormExercises(JSON.parse(JSON.stringify(routine.exercises || [])));
     setIsEditorOpen(true);
     setActiveMenuId(null);
+  };
+
+  // ---- CARDIO HANDLERS ----
+  const handleOpenNewCardio = () => {
+    setEditingCardio(null);
+    setCardioFormName('');
+    setCardioFormModality('Natação');
+    setCardioFormDuration('30');
+    setCardioFormDistance('');
+    setCardioFormCalories('');
+    setCardioFormNotes('');
+    setCardioFormScheduledDay('');
+    setIsCardioEditorOpen(true);
+  };
+
+  const handleOpenEditCardio = (cardio) => {
+    setEditingCardio(cardio);
+    setCardioFormName(cardio.name || '');
+    setCardioFormModality(cardio.modality || 'Natação');
+    setCardioFormDuration(String(cardio.targetDuration || 30));
+    setCardioFormDistance(cardio.targetDistance ? String(cardio.targetDistance) : '');
+    setCardioFormCalories(cardio.targetCalories ? String(cardio.targetCalories) : '');
+    setCardioFormNotes(cardio.notes || '');
+    setCardioFormScheduledDay(cardio.scheduledDay !== undefined && cardio.scheduledDay !== null ? String(cardio.scheduledDay) : '');
+    setIsCardioEditorOpen(true);
+  };
+
+  const handleSaveCardio = (e) => {
+    e.preventDefault();
+    if (!cardioFormName.trim()) return;
+
+    const data = {
+      name: cardioFormName.trim(),
+      modality: cardioFormModality,
+      targetDuration: Number(cardioFormDuration) || 30,
+      targetDistance: Number(cardioFormDistance) || 0,
+      targetCalories: Number(cardioFormCalories) || 0,
+      notes: cardioFormNotes.trim(),
+      scheduledDay: cardioFormScheduledDay !== '' ? Number(cardioFormScheduledDay) : null
+    };
+
+    if (editingCardio) {
+      updateCardioRoutine(editingCardio.id, data);
+    } else {
+      addCardioRoutine(data);
+    }
+    setIsCardioEditorOpen(false);
+  };
+
+  const handleOpenCardioCheckin = (name, modality, duration, distance, calories) => {
+    const timerMins = cardioTimerSeconds > 0 
+      ? Math.max(1, Math.round(cardioTimerSeconds / 60)) 
+      : (Number(duration) || 30);
+    setCheckinCardioName(name || 'Cardio');
+    setCheckinCardioModality(modality || 'Corrida');
+    setCheckinCardioDuration(String(timerMins));
+    setCheckinCardioDistance(distance ? String(distance) : '');
+    setCheckinCardioCalories(calories ? String(calories) : '');
+    setCheckinCardioNotes('');
+    setCheckinCardioPhoto(null);
+    setCheckinCardioError('');
+    setIsCardioCheckinOpen(true);
+  };
+
+  const handleConfirmCardioCheckin = (e) => {
+    e.preventDefault();
+    setCheckinCardioError('');
+
+    // Rule: photo mandatory ONLY if sharing to group
+    if (checkinCardioShare && !checkinCardioPhoto) {
+      setCheckinCardioError('A inclusão da foto de comprovação é OBRIGATÓRIA para validar e postar no feed do grupo! Desmarque a opção para salvar apenas no seu histórico pessoal.');
+      return;
+    }
+
+    logCardio({
+      durationMinutes: Number(checkinCardioDuration) || 30,
+      cardioType: checkinCardioModality,
+      distanceKm: Number(checkinCardioDistance) || 0,
+      calories: Number(checkinCardioCalories) || 0,
+      notes: checkinCardioNotes.trim(),
+      photoUrl: checkinCardioPhoto,
+      shareToGroup: checkinCardioShare
+    });
+
+    setIsCardioCheckinOpen(false);
+    setIsCardioTimerRunning(false);
+    setCardioTimerSeconds(0);
   };
 
   // Add exercise to form
@@ -384,7 +515,7 @@ export default function RoutinesPage() {
         </div>
       </div>
 
-      {/* Action Buttons Row matching Image 1: [ Nova rotina ] [ Explorar ] */}
+      {/* Action Buttons Row: [ Nova rotina ] [ Escala Semanal ] [ Nova Rotina Cardio ] */}
       <div className="rotinas-quick-actions-grid">
         <button 
           className="rotina-action-box"
@@ -403,9 +534,19 @@ export default function RoutinesPage() {
           <Calendar size={22} className="action-box-icon" />
           <span>Escala Semanal</span>
         </button>
+
+        <button 
+          className="rotina-action-box cardio-action-box"
+          onClick={handleOpenNewCardio}
+          id="btn-nova-rotina-cardio"
+          style={{ border: '1px solid rgba(245, 158, 11, 0.35)' }}
+        >
+          <span style={{ fontSize: '1.25rem', lineHeight: 1 }}>🏃</span>
+          <span style={{ color: '#f59e0b' }}>Nova Rotina Cardio</span>
+        </button>
       </div>
 
-      {/* PROGRAMAÇÃO DE HOJE: TREINO PRINCIPAL + CARDIO COMO SUB-TREINO */}
+      {/* PROGRAMAÇÃO DO DIA: TREINO PRINCIPAL + CARDIO COMO SUB-TREINO ORGANIZADO */}
       {(() => {
         const todayDayOfWeek = new Date().getDay();
         const todaySchedule = weeklySchedule?.[todayDayOfWeek];
@@ -418,6 +559,7 @@ export default function RoutinesPage() {
         const wTitle = todaySchedule?.workoutLabel || todaySchedule?.label || 'Treino de Musculação';
         const cTitle = todaySchedule?.cardioLabel || 'Sessão de Cardio';
         const matchedRoutine = routines.find(r => r.scheduledDay === todayDayOfWeek || (r.name && todaySchedule?.workoutLabel && r.name.toLowerCase() === todaySchedule.workoutLabel.toLowerCase()));
+        const matchedCardio = (cardioRoutines || []).find(c => c.scheduledDay === todayDayOfWeek || (c.name && todaySchedule?.cardioLabel && c.name.toLowerCase().includes(todaySchedule.cardioLabel.toLowerCase())));
 
         if (!hasW && !hasC) return null;
 
@@ -467,7 +609,7 @@ export default function RoutinesPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <span style={{ fontSize: '0.6875rem', fontWeight: 800, color: 'var(--accent)' }}>
-                      🏋️ TREINO PRINCIPAL
+                      🏋️ [TREINO PRINCIPAL]: {wTitle}
                     </span>
                     <h4 style={{ fontSize: '0.9375rem', fontWeight: 800, color: 'var(--text-primary)', margin: '2px 0 0 0' }}>
                       {wTitle}
@@ -485,14 +627,14 @@ export default function RoutinesPage() {
                       }
                     }}
                   >
-                    Iniciar Treino
+                    Bate-Ponto Musculação
                   </Button>
                 </div>
 
                 {matchedRoutine?.exercises?.length > 0 && (
                   <ul style={{ margin: '4px 0 0 0', paddingLeft: 16, fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
                     {matchedRoutine.exercises.map((ex, i) => (
-                      <li key={i}>{ex.name}</li>
+                      <li key={i}>• {ex.name}</li>
                     ))}
                   </ul>
                 )}
@@ -511,10 +653,10 @@ export default function RoutinesPage() {
                 border: '1px dashed rgba(245, 158, 11, 0.35)',
                 borderLeft: '4px solid #f59e0b'
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                   <div>
                     <span style={{ fontSize: '0.6875rem', fontWeight: 800, color: '#f59e0b' }}>
-                      🏃 CARDIO / SUB-TREINO
+                      🏃 [CARDIO / SUB-TREINO]: {cTitle}
                     </span>
                     <h4 style={{ fontSize: '0.9375rem', fontWeight: 800, color: '#f59e0b', margin: '2px 0 0 0' }}>
                       {cTitle}
@@ -523,15 +665,64 @@ export default function RoutinesPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => navigate('/')}
+                    onClick={() => handleOpenCardioCheckin(cTitle, matchedCardio?.modality, matchedCardio?.targetDuration, matchedCardio?.targetDistance, matchedCardio?.targetCalories)}
                     style={{ borderColor: 'rgba(245, 158, 11, 0.4)', color: '#f59e0b' }}
                   >
                     Bater Ponto Cardio
                   </Button>
                 </div>
-                <p style={{ margin: 0, fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-                  • {cTitle}
-                </p>
+
+                {/* Detalhes (Duração / Distância / Meta) */}
+                <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: '0.8125rem', color: 'var(--text-secondary)', marginTop: 2 }}>
+                  <span>⏱️ <strong>Duração:</strong> {matchedCardio?.targetDuration || 30} min</span>
+                  {matchedCardio?.targetDistance > 0 && <span>📏 <strong>Distância:</strong> {matchedCardio.targetDistance} km</span>}
+                  {matchedCardio?.targetCalories > 0 && <span>🔥 <strong>Meta:</strong> {matchedCardio.targetCalories} kcal</span>}
+                </div>
+
+                {matchedCardio?.notes && (
+                  <p style={{ margin: '2px 0 0 0', fontSize: '0.8125rem', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+                    "{matchedCardio.notes}"
+                  </p>
+                )}
+
+                {/* Cronômetro / Timer */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: 'rgba(245, 158, 11, 0.08)',
+                  padding: '8px 12px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid rgba(245, 158, 11, 0.25)',
+                  marginTop: 4,
+                  flexWrap: 'wrap',
+                  gap: 8
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#f59e0b' }}>CRONÔMETRO:</span>
+                    <span style={{ fontSize: '1.1875rem', fontWeight: 900, fontFamily: 'monospace', color: '#f59e0b' }}>
+                      {formatTimer(cardioTimerSeconds)}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <Button 
+                      type="button" 
+                      variant={isCardioTimerRunning ? "danger" : "secondary"} 
+                      size="sm"
+                      onClick={() => setIsCardioTimerRunning(!isCardioTimerRunning)}
+                    >
+                      {isCardioTimerRunning ? 'Pausar' : 'Iniciar'}
+                    </Button>
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => { setIsCardioTimerRunning(false); setCardioTimerSeconds(0); }}
+                    >
+                      Zerar
+                    </Button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -665,6 +856,116 @@ export default function RoutinesPage() {
                 </div>
               );
             })
+          )}
+        </div>
+      )}
+
+      {/* Minhas rotinas de cardio section */}
+      <div className="minhas-rotinas-header" onClick={() => setCardioFolderOpen(!cardioFolderOpen)} style={{ marginTop: 8 }}>
+        {cardioFolderOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+        <span>Minhas rotinas de cardio ({cardioRoutines?.length || 0})</span>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleOpenNewCardio();
+          }}
+          style={{
+            marginLeft: 'auto',
+            background: 'none',
+            border: 'none',
+            color: '#f59e0b',
+            fontSize: '0.8125rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4
+          }}
+        >
+          <Plus size={15} /> Nova
+        </button>
+      </div>
+
+      {cardioFolderOpen && (
+        <div className="routine-cards-stack-v2">
+          {(!cardioRoutines || cardioRoutines.length === 0) ? (
+            <div style={{
+              padding: '24px 16px',
+              textAlign: 'center',
+              background: 'var(--bg-card)',
+              border: '1px dashed rgba(245, 158, 11, 0.3)',
+              borderRadius: 'var(--radius-lg)',
+              color: 'var(--text-secondary)'
+            }}>
+              <span style={{ fontSize: '1.75rem', display: 'block', marginBottom: 6 }}>🏃</span>
+              <p style={{ margin: 0, fontWeight: 700, color: 'var(--text-primary)' }}>Nenhuma rotina de cardio salva</p>
+              <p style={{ margin: '4px 0 12px 0', fontSize: '0.8125rem' }}>Crie fichas para natação, esteira, bike ou corrida.</p>
+              <Button variant="secondary" size="sm" onClick={handleOpenNewCardio} style={{ borderColor: '#f59e0b', color: '#f59e0b' }}>
+                + Criar Rotina de Cardio
+              </Button>
+            </div>
+          ) : (
+            cardioRoutines.map(cardio => (
+              <div key={cardio.id} className="routine-card-v2" style={{ borderLeft: '4px solid #f59e0b' }}>
+                <div className="routine-card-v2-header">
+                  <div>
+                    <h3 className="routine-v2-name" style={{ color: '#f59e0b' }}>🏃 {cardio.name}</h3>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                      <span style={{ fontSize: '0.6875rem', padding: '2px 8px', background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', borderRadius: 'var(--radius-full)', fontWeight: 600 }}>
+                        {cardio.modality || 'Cardio'}
+                      </span>
+                      {cardio.scheduledDay !== undefined && cardio.scheduledDay !== null && (
+                        <span style={{ fontSize: '0.6875rem', padding: '2px 8px', background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', borderRadius: 'var(--radius-full)', fontWeight: 600 }}>
+                          📅 {DAYS_OF_WEEK.find(d => d.id === cardio.scheduledDay)?.name || 'Dia agendado'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      className="routine-more-btn"
+                      onClick={() => handleOpenEditCardio(cardio)}
+                      title="Editar rotina de cardio"
+                    >
+                      <Edit3 size={16} />
+                    </button>
+                    <button
+                      className="routine-more-btn"
+                      onClick={() => {
+                        if (confirm(`Excluir rotina de cardio "${cardio.name}"?`)) {
+                          deleteCardioRoutine(cardio.id);
+                        }
+                      }}
+                      title="Excluir rotina de cardio"
+                      style={{ color: '#ef4444' }}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: '0.8125rem', color: 'var(--text-secondary)', margin: '10px 0' }}>
+                  <span>⏱️ {cardio.targetDuration || 30} min</span>
+                  {cardio.targetDistance > 0 && <span>📏 {cardio.targetDistance} km</span>}
+                  {cardio.targetCalories > 0 && <span>🔥 {cardio.targetCalories} kcal</span>}
+                </div>
+
+                {cardio.notes && (
+                  <p style={{ margin: '0 0 12px 0', fontSize: '0.8125rem', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+                    "{cardio.notes}"
+                  </p>
+                )}
+
+                <button
+                  className="btn-comecar-rotina-blue"
+                  onClick={() => handleOpenCardioCheckin(cardio.name, cardio.modality, cardio.targetDuration, cardio.targetDistance, cardio.targetCalories)}
+                  style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}
+                >
+                  Bater Ponto Cardio
+                </button>
+              </div>
+            ))
           )}
         </div>
       )}
@@ -805,89 +1106,68 @@ export default function RoutinesPage() {
             </div>
 
             <div className="editor-exercises-section">
-              <div className="editor-section-header" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Exercícios & Cardio da Ficha ({formExercises.length})</h3>
-                  <Button 
-                    type="button" 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={handleAddExercise}
-                  >
-                    + Linha Vazia
-                  </Button>
-                </div>
+              <div className="editor-section-header" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Exercícios da Ficha ({formExercises.length})</h3>
 
-                {/* BOTÕES CENTRAIS: Adicionar Exercício e Adicionar Cardio */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, width: '100%' }}>
-                  <Button 
-                    type="button" 
-                    variant="primary" 
-                    size="md" 
-                    icon={Plus}
-                    onClick={() => {
-                      setExerciseModalCategory('Todos');
-                      setIsExerciseSelectorOpen(true);
-                    }}
-                    style={{ justifyContent: 'center' }}
-                  >
-                    Adicionar Exercício
-                  </Button>
-                  <Button 
-                    type="button" 
-                    variant="secondary" 
-                    size="md" 
-                    onClick={() => {
-                      setExerciseModalCategory('Cardio');
-                      setIsExerciseSelectorOpen(true);
-                    }}
-                    style={{ borderColor: '#f59e0b', color: '#f59e0b', justifyContent: 'center' }}
-                  >
-                    🏃 Adicionar Cardio
-                  </Button>
-                </div>
+                {/* BOTÃO PRINCIPAL ÚNICO: + Adicionar Exercício */}
+                <Button 
+                  type="button" 
+                  variant="primary" 
+                  size="md" 
+                  icon={Plus}
+                  onClick={() => {
+                    setExerciseModalCategory('Todos');
+                    setIsExerciseSelectorOpen(true);
+                  }}
+                  style={{ width: '100%', justifyContent: 'center', padding: '12px 16px', fontSize: '0.9375rem' }}
+                >
+                  + Adicionar Exercício
+                </Button>
               </div>
 
-              {formExercises.map((exercise, eIdx) => (
-                <div key={exercise.id} className="editor-exercise-card">
-                  <div className="editor-exercise-top-bar">
-                    <span className="editor-exercise-idx">Exercício #{eIdx + 1}</span>
-                    <button 
-                      type="button" 
-                      className="editor-remove-btn"
-                      onClick={() => handleRemoveExercise(eIdx)}
-                      title="Remover exercício"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-
-                  <div className="editor-exercise-fields">
-                    <div className="editor-muscle-group-select">
-                      <label className="input-label-sm">Grupo Muscular</label>
-                      <select
-                        className="editor-select"
-                        value={exercise.muscleGroup}
-                        onChange={e => handleUpdateExercise(eIdx, 'muscleGroup', e.target.value)}
+              {formExercises.length === 0 ? (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '32px 16px',
+                  background: 'var(--bg-elevated)',
+                  borderRadius: 'var(--radius-lg)',
+                  border: '1px dashed var(--border-subtle)',
+                  margin: '12px 0'
+                }}>
+                  <Dumbbell size={28} style={{ color: 'var(--accent)', margin: '0 auto 8px auto', display: 'block' }} />
+                  <p style={{ margin: 0, fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.9375rem' }}>
+                    Nenhum exercício na ficha ainda
+                  </p>
+                  <p style={{ margin: '4px 0 0 0', color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>
+                    Toque no botão <strong>+ Adicionar Exercício</strong> acima para escolher na lista categorizada com busca rápida.
+                  </p>
+                </div>
+              ) : (
+                formExercises.map((exercise, eIdx) => (
+                  <div key={exercise.id} className="editor-exercise-card">
+                    <div className="editor-exercise-top-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span className="editor-exercise-idx" style={{ background: 'var(--accent)', color: '#fff', padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontWeight: 800, fontSize: '0.75rem' }}>
+                          #{eIdx + 1}
+                        </span>
+                        <div>
+                          <span style={{ fontSize: '0.6875rem', fontWeight: 800, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block' }}>
+                            {exercise.muscleGroup || 'Musculação'}
+                          </span>
+                          <h4 style={{ margin: 0, fontSize: '1.0625rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                            {exercise.name}
+                          </h4>
+                        </div>
+                      </div>
+                      <button 
+                        type="button" 
+                        className="editor-remove-btn"
+                        onClick={() => handleRemoveExercise(eIdx)}
+                        title="Remover exercício"
                       >
-                        {DEFAULT_MUSCLE_GROUPS.map(mg => (
-                          <option key={mg} value={mg}>{mg}</option>
-                        ))}
-                      </select>
+                        <Trash2 size={16} />
+                      </button>
                     </div>
-
-                    <div className="editor-exercise-name-input">
-                      <label className="input-label-sm">Nome do Exercício</label>
-                      <input 
-                        type="text"
-                        className="editor-text-input"
-                        placeholder="Escreva aqui o nome do exercício (ex: Supino Reto)"
-                        value={exercise.name}
-                        onChange={e => handleUpdateExercise(eIdx, 'name', e.target.value)}
-                        required
-                      />
-                    </div>
-                  </div>
 
                   {/* Sets */}
                   <div className="editor-sets-section">
@@ -955,8 +1235,9 @@ export default function RoutinesPage() {
                     />
                   </div>
                 </div>
-              ))}
-            </div>
+              ))
+            )}
+          </div>
 
             <div className="editor-form-footer">
               <Button type="button" variant="ghost" onClick={() => setIsEditorOpen(false)}>
@@ -1212,6 +1493,284 @@ export default function RoutinesPage() {
             ]);
           }}
         />
+      )}
+      {/* Nova Rotina Cardio Modal */}
+      {isCardioEditorOpen && (
+        <Modal
+          isOpen={isCardioEditorOpen}
+          onClose={() => setIsCardioEditorOpen(false)}
+          title={editingCardio ? `Editar Cardio: ${editingCardio.name}` : 'Nova Rotina de Cardio'}
+          size="md"
+        >
+          <form className="routine-editor-form" onSubmit={handleSaveCardio}>
+            <Input
+              label="Nome da Rotina de Cardio"
+              placeholder="Ex: Natação Treino A, Esteira 40 min, Bike HIIT..."
+              value={cardioFormName}
+              onChange={e => setCardioFormName(e.target.value)}
+              required
+              autoFocus
+            />
+
+            <div className="form-group-custom" style={{ marginTop: 12 }}>
+              <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                Modalidade de Cardio
+              </label>
+              <select
+                className="editor-select"
+                style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', marginTop: 4 }}
+                value={cardioFormModality}
+                onChange={e => {
+                  setCardioFormModality(e.target.value);
+                  if (!cardioFormName) setCardioFormName(e.target.value);
+                }}
+              >
+                <option value="Natação">🏊 Natação</option>
+                <option value="Esteira (Caminhada / Corrida)">🏃 Esteira (Caminhada / Corrida)</option>
+                <option value="Bicicleta Ergométrica">🚴 Bicicleta Ergométrica</option>
+                <option value="Elíptico / Transport">⚡ Elíptico / Transport</option>
+                <option value="Remo Seco">🚣 Remo Seco</option>
+                <option value="Simulador de Escada">🪜 Simulador de Escada</option>
+                <option value="Corda de Pular">🪢 Corda de Pular</option>
+                <option value="Corrida / Caminhada ao Ar Livre">🌳 Corrida / Caminhada ao Ar Livre</option>
+                <option value="Outro">✨ Outra Modalidade</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 12 }}>
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                  Duração (min)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  className="editor-text-input"
+                  style={{ marginTop: 4 }}
+                  value={cardioFormDuration}
+                  onChange={e => setCardioFormDuration(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                  Distância (km)
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  className="editor-text-input"
+                  placeholder="0.0"
+                  style={{ marginTop: 4 }}
+                  value={cardioFormDistance}
+                  onChange={e => setCardioFormDistance(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                  Calorias (kcal)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  className="editor-text-input"
+                  placeholder="0"
+                  style={{ marginTop: 4 }}
+                  value={cardioFormCalories}
+                  onChange={e => setCardioFormCalories(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="form-group-custom" style={{ marginTop: 12 }}>
+              <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                Vincular a um Dia da Semana (Opcional)
+              </label>
+              <select
+                className="editor-select"
+                style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', marginTop: 4 }}
+                value={cardioFormScheduledDay}
+                onChange={e => setCardioFormScheduledDay(e.target.value)}
+              >
+                <option value="">Nenhum dia específico</option>
+                <option value="1">Segunda-feira</option>
+                <option value="2">Terça-feira</option>
+                <option value="3">Quarta-feira</option>
+                <option value="4">Quinta-feira</option>
+                <option value="5">Sexta-feira</option>
+                <option value="6">Sábado</option>
+                <option value="0">Domingo</option>
+              </select>
+              <small style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: 4, display: 'block' }}>
+                Ao vincular, esta rotina de cardio ficará automaticamente programada como sub-treino logo abaixo do treino principal do dia!
+              </small>
+            </div>
+
+            <div className="form-group-custom" style={{ marginTop: 12 }}>
+              <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                Observações ou Instruções (Opcional)
+              </label>
+              <textarea
+                className="editor-notes-textarea"
+                rows={2}
+                placeholder="Ex: Treino contínuo, tiros de velocidade, manter FC na zona 3..."
+                value={cardioFormNotes}
+                onChange={e => setCardioFormNotes(e.target.value)}
+                style={{ marginTop: 4 }}
+              />
+            </div>
+
+            <div className="editor-form-footer" style={{ marginTop: 18 }}>
+              <Button type="button" variant="ghost" onClick={() => setIsCardioEditorOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" variant="primary" icon={Check} style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
+                Salvar Rotina Cardio
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Bate-Ponto Cardio Modal */}
+      {isCardioCheckinOpen && (
+        <Modal
+          isOpen={isCardioCheckinOpen}
+          onClose={() => setIsCardioCheckinOpen(false)}
+          title={`🏃 Bate-Ponto: ${checkinCardioName}`}
+          size="md"
+        >
+          <form className="routine-editor-form" onSubmit={handleConfirmCardioCheckin}>
+            {checkinCardioError && (
+              <div style={{ padding: '10px 14px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: 'var(--radius-md)', color: '#ef4444', fontSize: '0.8125rem', marginBottom: 12 }}>
+                ⚠️ {checkinCardioError}
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <Input
+                label="Duração Realizada (minutos)"
+                type="number"
+                min="1"
+                value={checkinCardioDuration}
+                onChange={e => setCheckinCardioDuration(e.target.value)}
+                required
+              />
+              <Input
+                label="Distância (km) - Opcional"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.0"
+                value={checkinCardioDistance}
+                onChange={e => setCheckinCardioDistance(e.target.value)}
+              />
+            </div>
+
+            <Input
+              label="Calorias Queimadas (kcal) - Opcional"
+              type="number"
+              min="0"
+              placeholder="0"
+              value={checkinCardioCalories}
+              onChange={e => setCheckinCardioCalories(e.target.value)}
+            />
+
+            <div className="form-group-custom" style={{ marginTop: 12 }}>
+              <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                Como foi a sessão de cardio?
+              </label>
+              <textarea
+                className="editor-notes-textarea"
+                rows={2}
+                placeholder="Ex: Ritmo forte na esteira, ótimo fôlego!"
+                value={checkinCardioNotes}
+                onChange={e => setCheckinCardioNotes(e.target.value)}
+                style={{ marginTop: 4 }}
+              />
+            </div>
+
+            {/* Foto Comprobatória - Regra: Opcional pessoal, obrigatória para grupo */}
+            <div className="form-group-custom" style={{ marginTop: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <label style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  📸 Foto Comprobatória
+                </label>
+                <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: checkinCardioShare ? '#ef4444' : 'var(--text-tertiary)' }}>
+                  {checkinCardioShare ? '* Obrigatório para postar no grupo' : '(Opcional para registro pessoal)'}
+                </span>
+              </div>
+
+              {checkinCardioPhoto ? (
+                <div style={{ position: 'relative', borderRadius: 'var(--radius-md)', overflow: 'hidden', maxHeight: 180 }}>
+                  <img src={checkinCardioPhoto} alt="Comprovante de cardio" style={{ width: '100%', maxHeight: 180, objectFit: 'cover' }} />
+                  <button
+                    type="button"
+                    onClick={() => setCheckinCardioPhoto(null)}
+                    style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.7)', border: 'none', color: '#fff', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ) : (
+                <div
+                  onClick={() => cardioPhotoRef.current?.click()}
+                  style={{
+                    border: '1px dashed var(--border-color)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '16px',
+                    textAlign: 'center',
+                    background: 'var(--bg-elevated)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Camera size={24} style={{ color: '#f59e0b', margin: '0 auto 6px auto', display: 'block' }} />
+                  <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>Tirar foto ou anexar imagem</span>
+                  <input
+                    type="file"
+                    ref={cardioPhotoRef}
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = ev => setCheckinCardioPhoto(ev.target?.result);
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Toggle postar no feed */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, padding: '10px 12px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+              <input
+                type="checkbox"
+                id="checkin-cardio-share"
+                checked={checkinCardioShare}
+                onChange={e => setCheckinCardioShare(e.target.checked)}
+                style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#f59e0b' }}
+              />
+              <label htmlFor="checkin-cardio-share" style={{ fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer' }}>
+                Postar no Feed do Grupo (Requer foto)
+              </label>
+            </div>
+
+            <div className="editor-form-footer" style={{ marginTop: 18 }}>
+              <Button type="button" variant="ghost" onClick={() => setIsCardioCheckinOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" variant="primary" icon={Check} style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
+                Confirmar Bate-Ponto Cardio
+              </Button>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   );

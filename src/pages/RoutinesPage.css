@@ -106,11 +106,20 @@
   border-color: var(--accent);
 }
 
-/* Quick Actions Grid matching Image 1 */
+/* Quick Actions Grid: 3 Buttons */
 .rotinas-quick-actions-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+@media (max-width: 600px) {
+  .rotinas-quick-actions-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .rotinas-quick-actions-grid .cardio-action-box {
+    grid-column: span 2;
+  }
 }
 
 .rotina-action-box {

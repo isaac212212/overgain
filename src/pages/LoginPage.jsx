@@ -111,7 +111,7 @@ export default function LoginPage() {
           {!isLogin && (
             <Input
               label="Nome Completo / Apelido"
-              placeholder="Ex: Isaac Franco"
+              placeholder="Ex: João Silva"
               icon={User}
               value={name}
               onChange={e => setName(e.target.value)}

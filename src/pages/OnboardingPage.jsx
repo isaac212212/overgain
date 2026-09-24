@@ -85,7 +85,7 @@ export default function OnboardingPage() {
             <input
               type="text"
               className="onboarding-input"
-              placeholder="Ex: Isaac Franco"
+              placeholder="Ex: João Silva"
               value={username}
               onChange={e => setUsername(e.target.value)}
               autoFocus

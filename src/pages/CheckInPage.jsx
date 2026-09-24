@@ -62,8 +62,9 @@ export default function CheckInPage() {
   const handleConfirmCheckIn = (e) => {
     e.preventDefault();
 
-    if (!photoPreview) {
-      alert('Por favor, tire ou selecione uma foto comprovando seu treino para bater o ponto!');
+    // Foto obrigatória APENAS se for postar no feed do grupo
+    if (shareToGroup && !photoPreview) {
+      alert('A inclusão da foto de comprovação é OBRIGATÓRIA para validar e postar no Feed do Grupo! Desmarque o compartilhamento caso queira salvar apenas no seu histórico pessoal.');
       return;
     }
 
@@ -75,9 +76,9 @@ export default function CheckInPage() {
       durationMinutes: Number(duration) || 50,
       totalVolumeKg: Number(volumeKg) || 0,
       totalReps: 140,
-      photoUrl: photoPreview,
+      photoUrl: photoPreview || null,
       notes: notes.trim() || 'Treino executado com sucesso e dedicação total!',
-      userName: user?.name || 'Isaac Franco',
+      userName: user?.name || 'João Silva',
       userAvatar: user?.avatar
     };
 
@@ -87,14 +88,14 @@ export default function CheckInPage() {
     // Share to first group feed if selected
     if (shareToGroup && groups.length > 0) {
       addGroupFeedItem(groups[0].id, {
-        userId: user?.id || 'user_isaac',
-        userName: user?.name || 'Isaac Franco',
+        userId: user?.id || 'user_joao',
+        userName: user?.name || 'João Silva',
         userAvatar: user?.avatar,
         routineName,
         durationMinutes: Number(duration) || 50,
         totalVolumeKg: Number(volumeKg) || 0,
         notes: notes.trim() || 'Ponto batido! Mais um dia concluído no plano.',
-        photoUrl: photoPreview,
+        photoUrl: photoPreview || null,
         likes: 1,
         comments: []
       });
@@ -123,7 +124,9 @@ export default function CheckInPage() {
             <Card className="photo-card" padding="lg">
               <div className="photo-card-header">
                 <h3>Foto Comprobatória</h3>
-                <span className="photo-mandatory-tag">* Obrigatório</span>
+                <span className="photo-mandatory-tag" style={{ color: shareToGroup ? '#ef4444' : 'var(--text-secondary)' }}>
+                  {shareToGroup ? '* Obrigatório para postar no grupo' : '(Opcional para registro pessoal)'}
+                </span>
               </div>
 
               {photoPreview ? (

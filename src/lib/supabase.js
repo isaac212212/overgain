@@ -39,7 +39,7 @@ export const setSupabaseCredentials = (url, key) => {
 
 export const isCloudEnabled = () => Boolean(supabase);
 
-// Cloud Sync Helpers
+// ---- CLOUD SYNC: PROFILE ----
 export const syncProfileToCloud = async (userProfile) => {
   if (!supabase || !userProfile?.id) return null;
   try {
@@ -61,6 +61,26 @@ export const syncProfileToCloud = async (userProfile) => {
   }
 };
 
+export const fetchCloudProfile = async (userId) => {
+  if (!supabase || !userId) return null;
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+    if (error) {
+      console.warn('Supabase fetch profile error:', error.message);
+      return null;
+    }
+    return data;
+  } catch (err) {
+    console.warn('Supabase fetch profile exception:', err);
+    return null;
+  }
+};
+
+// ---- CLOUD SYNC: CHECKINS ----
 export const syncCheckinToCloud = async (checkinData) => {
   if (!supabase || !checkinData) return null;
   try {
@@ -69,7 +89,7 @@ export const syncCheckinToCloud = async (checkinData) => {
       .upsert({
         id: checkinData.id,
         user_id: checkinData.userId,
-        type: checkinData.type,
+        type: checkinData.type || 'workout',
         routine_name: checkinData.routineName,
         title: checkinData.title,
         date: checkinData.date,
@@ -117,6 +137,118 @@ export const fetchCloudCheckins = async (userId) => {
   }
 };
 
+// ---- CLOUD SYNC: ROUTINES ----
+export const syncRoutinesToCloud = async (userId, routines) => {
+  if (!supabase || !userId || !routines) return null;
+  try {
+    const { data, error } = await supabase
+      .from('user_data')
+      .upsert({
+        user_id: userId,
+        data_key: 'routines',
+        payload: JSON.stringify(routines),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id,data_key' });
+    if (error) console.warn('Supabase routines sync error:', error.message);
+    return data;
+  } catch (err) {
+    console.warn('Supabase routines sync exception:', err);
+    return null;
+  }
+};
+
+export const fetchCloudRoutines = async (userId) => {
+  if (!supabase || !userId) return null;
+  try {
+    const { data, error } = await supabase
+      .from('user_data')
+      .select('payload')
+      .eq('user_id', userId)
+      .eq('data_key', 'routines')
+      .maybeSingle();
+    if (error || !data) return null;
+    return JSON.parse(data.payload);
+  } catch (err) {
+    console.warn('Supabase fetch routines exception:', err);
+    return null;
+  }
+};
+
+// ---- CLOUD SYNC: CARDIO ROUTINES ----
+export const syncCardioRoutinesToCloud = async (userId, cardioRoutines) => {
+  if (!supabase || !userId || !cardioRoutines) return null;
+  try {
+    const { data, error } = await supabase
+      .from('user_data')
+      .upsert({
+        user_id: userId,
+        data_key: 'cardio_routines',
+        payload: JSON.stringify(cardioRoutines),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id,data_key' });
+    if (error) console.warn('Supabase cardio routines sync error:', error.message);
+    return data;
+  } catch (err) {
+    console.warn('Supabase cardio routines sync exception:', err);
+    return null;
+  }
+};
+
+export const fetchCloudCardioRoutines = async (userId) => {
+  if (!supabase || !userId) return null;
+  try {
+    const { data, error } = await supabase
+      .from('user_data')
+      .select('payload')
+      .eq('user_id', userId)
+      .eq('data_key', 'cardio_routines')
+      .maybeSingle();
+    if (error || !data) return null;
+    return JSON.parse(data.payload);
+  } catch (err) {
+    console.warn('Supabase fetch cardio routines exception:', err);
+    return null;
+  }
+};
+
+// ---- CLOUD SYNC: WEEKLY SCHEDULE ----
+export const syncScheduleToCloud = async (userId, schedule) => {
+  if (!supabase || !userId || !schedule) return null;
+  try {
+    const { data, error } = await supabase
+      .from('user_data')
+      .upsert({
+        user_id: userId,
+        data_key: 'schedule',
+        payload: JSON.stringify(schedule),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id,data_key' });
+    if (error) console.warn('Supabase schedule sync error:', error.message);
+    return data;
+  } catch (err) {
+    console.warn('Supabase schedule sync exception:', err);
+    return null;
+  }
+};
+
+export const fetchCloudSchedule = async (userId) => {
+  if (!supabase || !userId) return null;
+  try {
+    const { data, error } = await supabase
+      .from('user_data')
+      .select('payload')
+      .eq('user_id', userId)
+      .eq('data_key', 'schedule')
+      .maybeSingle();
+    if (error || !data) return null;
+    return JSON.parse(data.payload);
+  } catch (err) {
+    console.warn('Supabase fetch schedule exception:', err);
+    return null;
+  }
+};
+
+// ---- CLOUD SYNC: GROUPS ----
 export const syncGroupToCloud = async (groupData) => {
   if (!supabase || !groupData?.id) return null;
   try {
@@ -126,7 +258,7 @@ export const syncGroupToCloud = async (groupData) => {
         id: groupData.id,
         name: groupData.name,
         description: groupData.description,
-        invite_code: groupData.inviteCode,
+        invite_code: (groupData.inviteCode || '').toUpperCase(),
         photo_url: groupData.photoUrl,
         pin: groupData.pin,
         created_by: groupData.createdBy,

@@ -209,7 +209,7 @@ export default function GroupDetailPage() {
       'Tríceps': 5,
       'Panturrilha': 4,
     },
-    'user_isaac': {
+    'user_joao': {
       'Geral': 22,
       'Peito': 6,
       'Costas': 6,
@@ -309,7 +309,7 @@ export default function GroupDetailPage() {
 
     const table = {
       'Levantamento Terra': {
-        'user_isaac': { name: 'Levantamento Terra Convencional', weight: 180 },
+        'user_joao': { name: 'Levantamento Terra Convencional', weight: 180 },
         'user_lucas': { name: 'Levantamento Terra', weight: 170 },
         'user_gabriel': { name: 'Levantamento Terra Sumô', weight: 155 },
         'user_pedro': { name: 'Levantamento Terra', weight: 110 },
@@ -317,7 +317,7 @@ export default function GroupDetailPage() {
       },
       'Peito': {
         'user_lucas': { name: 'Supino Reto', weight: 110 },
-        'user_isaac': { name: 'Supino Inclinado', weight: 100 },
+        'user_joao': { name: 'Supino Inclinado', weight: 100 },
         'user_mari': { name: 'Supino Reto Halteres', weight: 55 },
         'user_gabriel': { name: 'Crucifixo Máquina', weight: 75 },
         'user_pedro': { name: 'Supino Reto', weight: 70 },
@@ -325,40 +325,40 @@ export default function GroupDetailPage() {
       'Costas': {
         'user_lucas': { name: 'Puxada Alta', weight: 95 },
         'user_gabriel': { name: 'Remada Curvada', weight: 90 },
-        'user_isaac': { name: 'Puxada Aberta', weight: 85 },
+        'user_joao': { name: 'Puxada Aberta', weight: 85 },
         'user_mari': { name: 'Remada Baixa Triângulo', weight: 60 },
         'user_pedro': { name: 'Puxada Frontal', weight: 65 },
       },
       'Bíceps': {
         'user_lucas': { name: 'Rosca Direta Barra W', weight: 42 },
         'user_gabriel': { name: 'Rosca Scott Halteres', weight: 38 },
-        'user_isaac': { name: 'Rosca Alternada', weight: 36 },
+        'user_joao': { name: 'Rosca Alternada', weight: 36 },
         'user_mari': { name: 'Rosca Martelo', weight: 24 },
         'user_pedro': { name: 'Rosca Direta', weight: 28 },
       },
       'Tríceps': {
         'user_lucas': { name: 'Tríceps Testa', weight: 46 },
-        'user_isaac': { name: 'Tríceps Corda', weight: 40 },
+        'user_joao': { name: 'Tríceps Corda', weight: 40 },
         'user_gabriel': { name: 'Tríceps Francês', weight: 34 },
         'user_mari': { name: 'Tríceps Pulley', weight: 32 },
         'user_pedro': { name: 'Tríceps Corda', weight: 26 },
       },
       'Ombros': {
         'user_lucas': { name: 'Desenvolvimento Halteres', weight: 65 },
-        'user_isaac': { name: 'Desenvolvimento Barra', weight: 60 },
+        'user_joao': { name: 'Desenvolvimento Barra', weight: 60 },
         'user_gabriel': { name: 'Elevação Lateral', weight: 18 },
         'user_mari': { name: 'Elevação Lateral Halteres', weight: 12 },
         'user_pedro': { name: 'Desenvolvimento Máquina', weight: 45 },
       },
       'Pernas': {
-        'user_isaac': { name: 'Leg Press 45º', weight: 280 },
+        'user_joao': { name: 'Leg Press 45º', weight: 280 },
         'user_mari': { name: 'Hip Thrust / Elevação Pélvica', weight: 220 },
         'user_lucas': { name: 'Agachamento Livre', weight: 140 },
         'user_gabriel': { name: 'Cadeira Extensora', weight: 95 },
         'user_pedro': { name: 'Leg Press 45º', weight: 160 },
       },
       'Panturrilha': {
-        'user_isaac': { name: 'Panturrilha no Leg Press', weight: 180 },
+        'user_joao': { name: 'Panturrilha no Leg Press', weight: 180 },
         'user_lucas': { name: 'Gêmeos Sentado', weight: 75 },
         'user_mari': { name: 'Panturrilha em Pé Máquina', weight: 70 },
         'user_gabriel': { name: 'Gêmeos Sentado', weight: 55 },
@@ -377,7 +377,7 @@ export default function GroupDetailPage() {
     const weeklyCardios = isSelf ? userThisWeekCardios.length : (
       m.id === 'user_lucas' ? 3 :
       m.id === 'user_mari' ? 4 :
-      m.id === 'user_isaac' ? 2 :
+      m.id === 'user_joao' ? 2 :
       m.id === 'user_gabriel' ? 2 :
       1
     );
@@ -387,7 +387,7 @@ export default function GroupDetailPage() {
 
     const prsCount = isSelf ? (user?.prsCount || 0) : (m.prsCount || (
       m.id === 'user_lucas' ? 22 :
-      m.id === 'user_isaac' ? 20 :
+      m.id === 'user_joao' ? 20 :
       m.id === 'user_mari' ? 15 :
       m.id === 'user_gabriel' ? 11 :
       8
