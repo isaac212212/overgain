@@ -13,7 +13,10 @@ import {
   Save, 
   Check, 
   ShieldCheck,
-  Smartphone
+  Smartphone,
+  Cloud,
+  CloudLightning,
+  CheckCircle2
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
@@ -21,6 +24,7 @@ import Input from '../components/ui/Input';
 import Avatar from '../components/ui/Avatar';
 import { INITIAL_USER, INITIAL_ROUTINES, INITIAL_CHECKINS, INITIAL_GROUPS, INITIAL_MESSAGES } from '../utils/initialData';
 import { storage } from '../utils/storage';
+import { isCloudEnabled, setSupabaseCredentials } from '../lib/supabase';
 import './SettingsPage.css';
 
 const WEEKLY_GOALS = [1, 2, 3, 4, 5, 6, 7];
@@ -39,6 +43,11 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // Cloud credentials form state
+  const [sbUrl, setSbUrl] = useState(() => localStorage.getItem('og_supabase_url') || import.meta.env.VITE_SUPABASE_URL || '');
+  const [sbKey, setSbKey] = useState(() => localStorage.getItem('og_supabase_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY || '');
+  const [cloudMsg, setCloudMsg] = useState('');
 
   const fileInputRef = useRef(null);
 
@@ -245,6 +254,90 @@ export default function SettingsPage() {
                 </>
               )}
             </button>
+          </div>
+        </Card>
+
+        {/* Cloud DB & Sync Card (Supabase) */}
+        <Card className="settings-card" padding="lg">
+          <div className="settings-card-header-icon">
+            <Cloud size={20} className="text-accent" />
+            <div>
+              <h2 className="settings-card-title">Banco de Dados em Nuvem & Sincronização</h2>
+              <p className="settings-card-desc">
+                Conecte seu projeto ao Supabase para sincronizar automaticamente seu perfil, histórico de treinos, medidas e grupos entre PC e Celular (APK).
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '10px 14px',
+              background: isCloudEnabled() ? 'rgba(34, 197, 94, 0.12)' : 'rgba(234, 179, 8, 0.12)',
+              border: `1px solid ${isCloudEnabled() ? 'rgba(34, 197, 94, 0.35)' : 'rgba(234, 179, 8, 0.35)'}`,
+              borderRadius: 'var(--radius-md)',
+              fontSize: '0.8125rem',
+              color: isCloudEnabled() ? '#22c55e' : '#eab308',
+              fontWeight: 600
+            }}>
+              {isCloudEnabled() ? (
+                <>
+                  <CheckCircle2 size={18} />
+                  <span>Sincronização em Nuvem Ativa e Conectada com Sucesso!</span>
+                </>
+              ) : (
+                <>
+                  <CloudLightning size={18} />
+                  <span>Modo Local / Offline Ativo (Insira suas credenciais Supabase abaixo para ativar a nuvem)</span>
+                </>
+              )}
+            </div>
+
+            <Input
+              label="Supabase URL (VITE_SUPABASE_URL)"
+              value={sbUrl}
+              onChange={e => setSbUrl(e.target.value)}
+              placeholder="https://xyzcompany.supabase.co"
+            />
+
+            <Input
+              label="Supabase Anon Key (VITE_SUPABASE_ANON_KEY)"
+              type="password"
+              value={sbKey}
+              onChange={e => setSbKey(e.target.value)}
+              placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+            />
+
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setSupabaseCredentials(sbUrl, sbKey);
+                  setCloudMsg('Credenciais salvas! Reiniciando conexões...');
+                }}
+              >
+                Salvar Credenciais da Nuvem
+              </Button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSbUrl('');
+                  setSbKey('');
+                  setSupabaseCredentials('', '');
+                }}
+              >
+                Desconectar Nuvem
+              </Button>
+
+              {cloudMsg && <span style={{ fontSize: '0.75rem', color: '#22c55e', fontWeight: 600 }}>{cloudMsg}</span>}
+            </div>
           </div>
         </Card>
 

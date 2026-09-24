@@ -21,6 +21,7 @@ import {
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
+import ExerciseSelectorModal from '../components/ui/ExerciseSelectorModal';
 import './ActiveWorkoutPage.css';
 
 export default function ActiveWorkoutPage() {
@@ -44,6 +45,7 @@ export default function ActiveWorkoutPage() {
 
   // Finish modal state
   const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
+  const [isAddExerciseModalOpen, setIsAddExerciseModalOpen] = useState(false);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [workoutTitle, setWorkoutTitle] = useState(activeWorkout?.routineName || 'Treino Concluído');
   const [generalNotes, setGeneralNotes] = useState('');
@@ -604,7 +606,59 @@ export default function ActiveWorkoutPage() {
             </button>
           </Card>
         ))}
+
+        {/* Button to add new exercise to live workout session */}
+        <button
+          type="button"
+          className="btn-add-new-exercise-live"
+          onClick={() => setIsAddExerciseModalOpen(true)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            width: '100%',
+            padding: '14px',
+            background: 'var(--bg-card)',
+            border: '1px dashed var(--accent)',
+            borderRadius: 'var(--radius-lg)',
+            color: 'var(--accent)',
+            fontWeight: 700,
+            fontSize: '0.9375rem',
+            cursor: 'pointer',
+            marginTop: 12
+          }}
+        >
+          <Plus size={18} />
+          <span>Adicionar Exercício do Catálogo</span>
+        </button>
       </div>
+
+      {/* Categorized Exercise Selector Modal for Live Workout */}
+      {isAddExerciseModalOpen && (
+        <ExerciseSelectorModal
+          isOpen={isAddExerciseModalOpen}
+          onClose={() => setIsAddExerciseModalOpen(false)}
+          onSelectExercise={(selectedEx) => {
+            const updatedExercises = JSON.parse(JSON.stringify(activeWorkout.exercises || []));
+            updatedExercises.push({
+              name: selectedEx.name,
+              muscleGroup: selectedEx.muscleGroup,
+              notes: '',
+              sets: (selectedEx.sets || [{ setNumber: 1, weight: 0, reps: 10 }]).map((s, sIdx) => ({
+                setNumber: sIdx + 1,
+                weight: 0,
+                reps: s.reps || 10,
+                completed: false,
+                previousWeight: 20,
+                previousReps: 10,
+                previous: '20kg x 10'
+              }))
+            });
+            updateActiveWorkout({ exercises: updatedExercises });
+          }}
+        />
+      )}
 
       {/* Finish Workout Modal with Mandatory Photo Proof */}
       {isFinishModalOpen && (

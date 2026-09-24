@@ -25,6 +25,7 @@ import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
 import Input from '../components/ui/Input';
+import ExerciseSelectorModal from '../components/ui/ExerciseSelectorModal';
 import { generateId } from '../utils/storage';
 import './RoutinesPage.css';
 
@@ -32,10 +33,14 @@ const DEFAULT_MUSCLE_GROUPS = [
   'Peito', 
   'Costas', 
   'Pernas', 
+  'Quadríceps',
+  'Posterior de Coxa',
+  'Glúteos',
   'Ombros', 
   'Bíceps', 
   'Tríceps', 
   'Abdômen', 
+  'Panturrilha',
   'Antebraço',
   'Cardio'
 ];
@@ -69,6 +74,7 @@ export default function RoutinesPage() {
   const [selectedRoutine, setSelectedRoutine] = useState(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [isExerciseSelectorOpen, setIsExerciseSelectorOpen] = useState(false);
   const [editingRoutine, setEditingRoutine] = useState(null);
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [folderOpen, setFolderOpen] = useState(true);
@@ -628,15 +634,25 @@ export default function RoutinesPage() {
             <div className="editor-exercises-section">
               <div className="editor-section-header">
                 <h3>Exercícios da Rotina ({formExercises.length})</h3>
-                <Button 
-                  type="button" 
-                  variant="secondary" 
-                  size="sm" 
-                  icon={Plus}
-                  onClick={handleAddExercise}
-                >
-                  Adicionar Exercício
-                </Button>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <Button 
+                    type="button" 
+                    variant="secondary" 
+                    size="sm" 
+                    icon={Plus}
+                    onClick={() => setIsExerciseSelectorOpen(true)}
+                  >
+                    🔍 Catálogo de Exercícios
+                  </Button>
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={handleAddExercise}
+                  >
+                    Linha em Branco
+                  </Button>
+                </div>
               </div>
 
               {formExercises.map((exercise, eIdx) => (
@@ -940,6 +956,28 @@ export default function RoutinesPage() {
             </div>
           </form>
         </Modal>
+      )}
+
+      {/* Categorized & Fast Exercise Selector Modal */}
+      {isExerciseSelectorOpen && (
+        <ExerciseSelectorModal
+          isOpen={isExerciseSelectorOpen}
+          onClose={() => setIsExerciseSelectorOpen(false)}
+          onSelectExercise={(selectedEx) => {
+            setFormExercises(prev => [
+              ...prev,
+              {
+                id: generateId(),
+                muscleGroup: selectedEx.muscleGroup,
+                name: selectedEx.name,
+                notes: '',
+                sets: selectedEx.sets || [
+                  { setNumber: 1, weight: 0, reps: 10 }
+                ]
+              }
+            ]);
+          }}
+        />
       )}
     </div>
   );
