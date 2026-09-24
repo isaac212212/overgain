@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Mail, Lock, Eye, EyeOff, User, Target, Check, Sparkles } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, User, Target, Check, Sparkles, Download } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import './LoginPage.css';
@@ -226,6 +226,21 @@ export default function LoginPage() {
             {isLogin ? 'Cadastre-se' : 'Entrar'}
           </button>
         </p>
+
+        {/* APK Download Button */}
+        <div className="login-apk-section">
+          <div className="login-divider">
+            <span>ou</span>
+          </div>
+          <a
+            href="/Overgain.apk"
+            download="Overgain.apk"
+            className="login-apk-btn"
+          >
+            <Download size={16} />
+            <span>Baixar App Android (.apk)</span>
+          </a>
+        </div>
       </div>
     </div>
   );

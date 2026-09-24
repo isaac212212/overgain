@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Dumbbell, Camera, Users, UserCircle, Settings } from 'lucide-react';
+import { LayoutDashboard, Dumbbell, Camera, Users, UserCircle, Settings, Download } from 'lucide-react';
 import './Sidebar.css';
 
 const navItems = [
@@ -32,6 +32,18 @@ export default function Sidebar() {
           </NavLink>
         ))}
       </nav>
+
+      <div className="sidebar-footer">
+        <a
+          href="/Overgain.apk"
+          download="Overgain.apk"
+          className="sidebar-apk-btn"
+          title="Baixar App Android (.apk)"
+        >
+          <Download size={18} />
+          <span>Baixar App Android (.apk)</span>
+        </a>
+      </div>
     </aside>
   );
 }

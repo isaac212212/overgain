@@ -90,6 +90,34 @@
   border-radius: var(--radius-full);
 }
 
+.sidebar-footer {
+  margin-top: auto;
+  padding: var(--space-md) var(--space-sm) 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.sidebar-apk-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all var(--transition-fast);
+}
+
+.sidebar-apk-btn:hover {
+  background: var(--bg-elevated);
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+
 /* Hide sidebar on mobile */
 @media (max-width: 768px) {
   .sidebar {
