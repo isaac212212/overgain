@@ -1,15 +1,28 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const ThemeContext = createContext();
 
 export function ThemeProvider({ children }) {
   const [theme, setTheme] = useState(() => {
-    return localStorage.getItem('heavyduty_theme') || 'dark';
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        return window.localStorage.getItem('heavyduty_theme') || 'dark';
+      }
+    } catch {
+      // localStorage unavailable (Android WebView / restricted mode)
+    }
+    return 'dark';
   });
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('heavyduty_theme', theme);
+    try {
+      document.documentElement.setAttribute('data-theme', theme);
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem('heavyduty_theme', theme);
+      }
+    } catch {
+      // Ignore storage errors
+    }
   }, [theme]);
 
   const toggleTheme = () => {

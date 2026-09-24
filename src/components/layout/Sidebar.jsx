@@ -1,3 +1,4 @@
+import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, Dumbbell, Camera, Users, UserCircle, Settings, Download } from 'lucide-react';
 import './Sidebar.css';

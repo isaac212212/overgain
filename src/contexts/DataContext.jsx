@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { storage, generateId } from '../utils/storage';
 import { DEFAULT_WEEKLY_SCHEDULE } from '../utils/initialData';

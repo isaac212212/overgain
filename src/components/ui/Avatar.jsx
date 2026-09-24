@@ -1,3 +1,4 @@
+import React from 'react';
 import './Avatar.css';
 
 // Instagram-style head & shoulders silhouette (bust only)

@@ -31,7 +31,11 @@ export default class ErrorBoundary extends React.Component {
     } catch (e) {
       console.warn('Failed to clear storage:', e);
     }
-    window.location.href = '/';
+    try {
+      window.location.href = '/';
+    } catch {
+      // fallback
+    }
   };
 
   render() {

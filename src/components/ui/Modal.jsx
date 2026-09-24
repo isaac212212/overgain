@@ -1,6 +1,6 @@
+import React, { useEffect } from 'react';
 import './Modal.css';
 import { X } from 'lucide-react';
-import { useEffect } from 'react';
 
 export default function Modal({
   isOpen,

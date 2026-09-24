@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { storage } from '../utils/storage';
 import { DEFAULT_WEEKLY_SCHEDULE } from '../utils/initialData';
 import { supabase, isCloudEnabled } from '../lib/supabase';
