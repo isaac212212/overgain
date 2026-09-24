@@ -1,43 +1,107 @@
 import { createClient } from '@supabase/supabase-js';
 
+// Safe Fallback Auth & Client for Mobile WebViews / APK when Supabase keys are not yet configured
+const fallbackAuth = {
+  getSession: async () => ({ data: { session: null }, error: null }),
+  onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+  signInWithPassword: async () => ({ data: { user: null, session: null }, error: new Error('Nuvem não configurada') }),
+  signUp: async () => ({ data: { user: null, session: null }, error: new Error('Nuvem não configurada') }),
+  signOut: async () => ({ error: null }),
+  getUser: async () => ({ data: { user: null }, error: null })
+};
+
+const fallbackSupabase = {
+  auth: fallbackAuth,
+  from: () => ({
+    select: () => ({
+      eq: () => ({
+        maybeSingle: async () => ({ data: null, error: null }),
+        order: () => Promise.resolve({ data: [], error: null }),
+        then: (resolve) => resolve({ data: [], error: null })
+      }),
+      order: () => Promise.resolve({ data: [], error: null }),
+      maybeSingle: async () => ({ data: null, error: null }),
+      then: (resolve) => resolve({ data: [], error: null })
+    }),
+    upsert: async () => ({ data: null, error: null })
+  })
+};
+
 // Get Supabase URL and Anon Key from environment or local storage override
 const getSupabaseConfig = () => {
-  const envUrl = import.meta.env.VITE_SUPABASE_URL || '';
-  const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+  let envUrl = '';
+  let envKey = '';
 
-  const storedUrl = localStorage.getItem('og_supabase_url') || '';
-  const storedKey = localStorage.getItem('og_supabase_anon_key') || '';
+  try {
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      envUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.REACT_APP_SUPABASE_URL || '';
+      envKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.REACT_APP_SUPABASE_ANON_KEY || '';
+    }
+  } catch (e) {
+    console.warn('Could not read import.meta.env:', e);
+  }
 
-  const url = storedUrl || envUrl;
-  const key = storedKey || envKey;
+  // Also support window / global overrides if injected by Capacitor / Android WebView
+  if (!envUrl && typeof window !== 'undefined' && window.__ENV__) {
+    envUrl = window.__ENV__.VITE_SUPABASE_URL || '';
+    envKey = window.__ENV__.VITE_SUPABASE_ANON_KEY || '';
+  }
 
-  return { url, key, isConfigured: Boolean(url && key) };
+  let storedUrl = '';
+  let storedKey = '';
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      storedUrl = window.localStorage.getItem('og_supabase_url') || '';
+      storedKey = window.localStorage.getItem('og_supabase_anon_key') || '';
+    }
+  } catch {
+    // Ignore storage restrictions
+  }
+
+  const url = (storedUrl || envUrl || '').trim();
+  const key = (storedKey || envKey || '').trim();
+  const isValidUrl = url.startsWith('http://') || url.startsWith('https://');
+
+  return { url, key, isConfigured: Boolean(isValidUrl && key) };
 };
 
 const config = getSupabaseConfig();
 
-export const supabase = config.isConfigured
-  ? createClient(config.url, config.key, {
+let realClient = null;
+if (config.isConfigured) {
+  try {
+    realClient = createClient(config.url, config.key, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true
       }
-    })
-  : null;
+    });
+  } catch (err) {
+    console.warn('Failed to initialize Supabase client:', err);
+    realClient = null;
+  }
+}
+
+// Guaranteed to NEVER be null or have auth undefined
+export const supabase = realClient || fallbackSupabase;
 
 export const setSupabaseCredentials = (url, key) => {
-  if (url && key) {
-    localStorage.setItem('og_supabase_url', url.trim());
-    localStorage.setItem('og_supabase_anon_key', key.trim());
-  } else {
-    localStorage.removeItem('og_supabase_url');
-    localStorage.removeItem('og_supabase_anon_key');
+  try {
+    if (url && key) {
+      localStorage.setItem('og_supabase_url', url.trim());
+      localStorage.setItem('og_supabase_anon_key', key.trim());
+    } else {
+      localStorage.removeItem('og_supabase_url');
+      localStorage.removeItem('og_supabase_anon_key');
+    }
+  } catch (e) {
+    console.warn('Could not save Supabase credentials:', e);
   }
   window.location.reload();
 };
 
-export const isCloudEnabled = () => Boolean(supabase);
+export const isCloudEnabled = () => Boolean(realClient);
 
 // ---- CLOUD SYNC: PROFILE ----
 export const syncProfileToCloud = async (userProfile) => {

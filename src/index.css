@@ -111,11 +111,12 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   scroll-behavior: smooth;
+  background-color: #0a0a0a;
 }
 
 body {
   font-family: var(--font-family);
-  background-color: var(--bg-primary);
+  background-color: #0a0a0a;
   color: var(--text-primary);
   line-height: 1.5;
   min-height: 100vh;

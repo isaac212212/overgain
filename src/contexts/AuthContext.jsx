@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { storage } from '../utils/storage';
 import { DEFAULT_WEEKLY_SCHEDULE } from '../utils/initialData';
+import { supabase, isCloudEnabled } from '../lib/supabase';
 
 const AuthContext = createContext();
 
@@ -24,6 +25,9 @@ export function AuthProvider({ children }) {
   // Pending user (during onboarding / registration)
   const [pendingUser, setPendingUser] = useState(() => storage.get('pending_user', null));
 
+  // Loading state with 3-second safety timeout for mobile / APK WebViews
+  const [isLoading, setIsLoading] = useState(true);
+
   // Sync user state with accounts & currentUserId
   useEffect(() => {
     if (currentUserId && accounts[currentUserId]) {
@@ -44,6 +48,48 @@ export function AuthProvider({ children }) {
       storage.remove('pending_user');
     }
   }, [pendingUser]);
+
+  // Session verification with 3s max timeout (prevents stuck black screens in APK)
+  useEffect(() => {
+    let timeoutId = null;
+    let isCancelled = false;
+
+    timeoutId = setTimeout(() => {
+      if (!isCancelled) {
+        setIsLoading(false);
+      }
+    }, 3000);
+
+    const verifySession = async () => {
+      try {
+        if (isCloudEnabled() && supabase?.auth?.getSession) {
+          const { data, error } = await supabase.auth.getSession();
+          if (!isCancelled && !error && data?.session?.user) {
+            const cloudUser = data.session.user;
+            const existing = Object.values(accounts).find(a => a.email === cloudUser.email);
+            if (existing) {
+              setCurrentUserId(existing.id);
+              setUser(existing);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Session verification catch:', err);
+      } finally {
+        if (!isCancelled) {
+          clearTimeout(timeoutId);
+          setIsLoading(false);
+        }
+      }
+    };
+
+    verifySession();
+
+    return () => {
+      isCancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, []);
 
   // Login with existing or new Google Account
   const loginWithGoogle = (googleEmail) => {
@@ -323,6 +369,7 @@ export function AuthProvider({ children }) {
       accounts,
       isAuthenticated: Boolean(user && user.onboarded),
       isOnboarded: Boolean(user && user.onboarded),
+      isLoading,
       loginWithGoogle,
       loginWithEmail,
       registerWithEmail,

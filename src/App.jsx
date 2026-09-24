@@ -14,7 +14,56 @@ import ActiveWorkoutPage from './pages/ActiveWorkoutPage';
 
 // Route protector helper
 function ProtectedRoute({ children }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
+  
+  if (isLoading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        backgroundColor: '#0a0a0a',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: '#ffffff',
+        fontFamily: 'Inter, sans-serif'
+      }}>
+        <div style={{
+          width: '64px',
+          height: '64px',
+          borderRadius: '18px',
+          background: 'linear-gradient(135deg, #FF6B00 0%, #FF8533 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '32px',
+          fontWeight: '900',
+          color: '#ffffff',
+          boxShadow: '0 0 32px rgba(255, 107, 0, 0.4)',
+          marginBottom: '20px'
+        }}>
+          O
+        </div>
+        <div style={{
+          fontSize: '18px',
+          fontWeight: '800',
+          letterSpacing: '2px',
+          color: '#ffffff',
+          marginBottom: '24px'
+        }}>
+          OVERGAIN
+        </div>
+        <div style={{
+          width: '28px',
+          height: '28px',
+          border: '3px solid rgba(255, 107, 0, 0.15)',
+          borderTopColor: '#FF6B00',
+          borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite'
+        }} />
+      </div>
+    );
+  }
   
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
