@@ -1,131 +1,240 @@
 import { useState, useMemo } from 'react';
-import { Search, Plus, Dumbbell, Check, Sparkles, X, ChevronRight } from 'lucide-react';
+import { Search, Plus, Dumbbell, Check, X, ChevronRight, Activity } from 'lucide-react';
 import Modal from './Modal';
 import Button from './Button';
 import './ExerciseSelectorModal.css';
 
 export const EXERCISE_DATABASE = [
-  // QUADRÍCEPS
-  { id: 'ex_quad_1', name: 'Agachamento Livre com Barra', muscleGroup: 'Quadríceps', category: 'Pernas' },
-  { id: 'ex_quad_2', name: 'Leg Press 45°', muscleGroup: 'Quadríceps', category: 'Pernas' },
-  { id: 'ex_quad_3', name: 'Hack Squat', muscleGroup: 'Quadríceps', category: 'Pernas' },
-  { id: 'ex_quad_4', name: 'Agachamento no Smith', muscleGroup: 'Quadríceps', category: 'Pernas' },
-  { id: 'ex_quad_5', name: 'Cadeira Extensora', muscleGroup: 'Quadríceps', category: 'Pernas' },
-  { id: 'ex_quad_6', name: 'Agachamento Búlgaro', muscleGroup: 'Quadríceps', category: 'Pernas' },
-  { id: 'ex_quad_7', name: 'Passada / Afundo com Halteres', muscleGroup: 'Quadríceps', category: 'Pernas' },
-  { id: 'ex_quad_8', name: 'Sissy Squat', muscleGroup: 'Quadríceps', category: 'Pernas' },
+  // 1. PEITORAL
+  { id: 'p_1', name: 'Supino reto com barra', muscleGroup: 'Peitoral' },
+  { id: 'p_2', name: 'Supino reto com halteres', muscleGroup: 'Peitoral' },
+  { id: 'p_3', name: 'Supino reto na máquina articulada', muscleGroup: 'Peitoral' },
+  { id: 'p_4', name: 'Supino reto na máquina Smith', muscleGroup: 'Peitoral' },
+  { id: 'p_5', name: 'Supino reto na fita de suspensão (TRX)', muscleGroup: 'Peitoral' },
+  { id: 'p_6', name: 'Supino inclinado com barra', muscleGroup: 'Peitoral' },
+  { id: 'p_7', name: 'Supino inclinado com halteres', muscleGroup: 'Peitoral' },
+  { id: 'p_8', name: 'Supino inclinado na máquina Smith', muscleGroup: 'Peitoral' },
+  { id: 'p_9', name: 'Supino inclinado na máquina articulada', muscleGroup: 'Peitoral' },
+  { id: 'p_10', name: 'Supino declinado com barra', muscleGroup: 'Peitoral' },
+  { id: 'p_11', name: 'Supino declinado com halteres', muscleGroup: 'Peitoral' },
+  { id: 'p_12', name: 'Supino declinado na máquina Smith', muscleGroup: 'Peitoral' },
+  { id: 'p_13', name: 'Crucifixo reto com halteres', muscleGroup: 'Peitoral' },
+  { id: 'p_14', name: 'Crucifixo inclinado com halteres', muscleGroup: 'Peitoral' },
+  { id: 'p_15', name: 'Crucifixo declinado com halteres', muscleGroup: 'Peitoral' },
+  { id: 'p_16', name: 'Crossover com polia alta', muscleGroup: 'Peitoral' },
+  { id: 'p_17', name: 'Crossover com polia média', muscleGroup: 'Peitoral' },
+  { id: 'p_18', name: 'Crossover com polia baixa', muscleGroup: 'Peitoral' },
+  { id: 'p_19', name: 'Peck deck / Voador com pegada neutra', muscleGroup: 'Peitoral' },
+  { id: 'p_20', name: 'Peck deck / Voador com pegada aberta', muscleGroup: 'Peitoral' },
+  { id: 'p_21', name: 'Flexão de braços tradicional', muscleGroup: 'Peitoral' },
+  { id: 'p_22', name: 'Flexão de braços inclinada (mãos elevadas)', muscleGroup: 'Peitoral' },
+  { id: 'p_23', name: 'Flexão de braços declinada (pés elevados)', muscleGroup: 'Peitoral' },
+  { id: 'p_24', name: 'Flexão de braços diamante', muscleGroup: 'Peitoral' },
+  { id: 'p_25', name: 'Flexão de braços aberta', muscleGroup: 'Peitoral' },
+  { id: 'p_26', name: 'Paralelas para peito (corpo inclinado à frente)', muscleGroup: 'Peitoral' },
 
-  // POSTERIOR DE COXA / GLÚTEOS
-  { id: 'ex_post_1', name: 'Stiff com Barra / Halteres', muscleGroup: 'Posterior de Coxa', category: 'Pernas' },
-  { id: 'ex_post_2', name: 'Levantamento Terra Romeno (RDL)', muscleGroup: 'Posterior de Coxa', category: 'Pernas' },
-  { id: 'ex_post_3', name: 'Mesa Flexora', muscleGroup: 'Posterior de Coxa', category: 'Pernas' },
-  { id: 'ex_post_4', name: 'Cadeira Flexora', muscleGroup: 'Posterior de Coxa', category: 'Pernas' },
-  { id: 'ex_post_5', name: 'Flexão em Pé Unilateral', muscleGroup: 'Posterior de Coxa', category: 'Pernas' },
-  { id: 'ex_glut_1', name: 'Elevação Pélvica com Barra / Máquina', muscleGroup: 'Glúteos', category: 'Pernas' },
-  { id: 'ex_glut_2', name: 'Cadeira Abdutora', muscleGroup: 'Glúteos', category: 'Pernas' },
-  { id: 'ex_glut_3', name: 'Glúteo na Polia / Caneleira', muscleGroup: 'Glúteos', category: 'Pernas' },
+  // 2. COSTAS
+  { id: 'c_1', name: 'Puxada alta com pegada aberta pronada', muscleGroup: 'Costas' },
+  { id: 'c_2', name: 'Puxada alta com pegada supinada', muscleGroup: 'Costas' },
+  { id: 'c_3', name: 'Puxada alta com pegada neutra (triângulo)', muscleGroup: 'Costas' },
+  { id: 'c_4', name: 'Puxada alta unilateral na polia', muscleGroup: 'Costas' },
+  { id: 'c_5', name: 'Barra fixa com pegada pronada (Pull-up)', muscleGroup: 'Costas' },
+  { id: 'c_6', name: 'Barra fixa com pegada supinada (Chin-up)', muscleGroup: 'Costas' },
+  { id: 'c_7', name: 'Barra fixa com pegada neutra', muscleGroup: 'Costas' },
+  { id: 'c_8', name: 'Remada curvada com barra pronada', muscleGroup: 'Costas' },
+  { id: 'c_9', name: 'Remada curvada com barra supinada', muscleGroup: 'Costas' },
+  { id: 'c_10', name: 'Remada curvada com halteres', muscleGroup: 'Costas' },
+  { id: 'c_11', name: 'Remada unilateral com halter ("Serrote")', muscleGroup: 'Costas' },
+  { id: 'c_12', name: 'Remada unilateral na polia', muscleGroup: 'Costas' },
+  { id: 'c_13', name: 'Remada baixa na polia com triângulo', muscleGroup: 'Costas' },
+  { id: 'c_14', name: 'Remada baixa na polia com barra reta', muscleGroup: 'Costas' },
+  { id: 'c_15', name: 'Remada baixa na polia com corda', muscleGroup: 'Costas' },
+  { id: 'c_16', name: 'Remada cavalo (barra T) livre', muscleGroup: 'Costas' },
+  { id: 'c_17', name: 'Remada cavalo articulada (com apoio no peito)', muscleGroup: 'Costas' },
+  { id: 'c_18', name: 'Remada articulada na máquina', muscleGroup: 'Costas' },
+  { id: 'c_19', name: 'Pullover com halter no banco', muscleGroup: 'Costas' },
+  { id: 'c_20', name: 'Pullover na polia alta com barra reta', muscleGroup: 'Costas' },
+  { id: 'c_21', name: 'Puxada com braços estendidos na polia alta com corda', muscleGroup: 'Costas' },
+  { id: 'c_22', name: 'Puxada com braços estendidos na polia alta com barra', muscleGroup: 'Costas' },
 
-  // PEITO
-  { id: 'ex_peito_1', name: 'Supino Reto com Barra', muscleGroup: 'Peito', category: 'Empurrar' },
-  { id: 'ex_peito_2', name: 'Supino Reto com Halteres', muscleGroup: 'Peito', category: 'Empurrar' },
-  { id: 'ex_peito_3', name: 'Supino Inclinado com Halteres', muscleGroup: 'Peito', category: 'Empurrar' },
-  { id: 'ex_peito_4', name: 'Supino Inclinado com Barra', muscleGroup: 'Peito', category: 'Empurrar' },
-  { id: 'ex_peito_5', name: 'Supino Declinado (Barra/Halteres)', muscleGroup: 'Peito', category: 'Empurrar' },
-  { id: 'ex_peito_6', name: 'Crossover na Polia (Cabo)', muscleGroup: 'Peito', category: 'Empurrar' },
-  { id: 'ex_peito_7', name: 'Crucifixo Reto com Halteres', muscleGroup: 'Peito', category: 'Empurrar' },
-  { id: 'ex_peito_8', name: 'Crucifixo Inclinado com Halteres', muscleGroup: 'Peito', category: 'Empurrar' },
-  { id: 'ex_peito_9', name: 'Peck Deck / Voador', muscleGroup: 'Peito', category: 'Empurrar' },
-  { id: 'ex_peito_10', name: 'Flexão de Braço (Push-up)', muscleGroup: 'Peito', category: 'Empurrar' },
+  // 3. OMBROS
+  { id: 'o_1', name: 'Desenvolvimento com halteres sentado', muscleGroup: 'Ombros' },
+  { id: 'o_2', name: 'Desenvolvimento com halteres em pé', muscleGroup: 'Ombros' },
+  { id: 'o_3', name: 'Desenvolvimento Arnold com halteres', muscleGroup: 'Ombros' },
+  { id: 'o_4', name: 'Desenvolvimento com barra pela frente', muscleGroup: 'Ombros' },
+  { id: 'o_5', name: 'Desenvolvimento na máquina Smith', muscleGroup: 'Ombros' },
+  { id: 'o_6', name: 'Desenvolvimento na máquina articulada', muscleGroup: 'Ombros' },
+  { id: 'o_7', name: 'Elevação lateral com halteres em pé', muscleGroup: 'Ombros' },
+  { id: 'o_8', name: 'Elevação lateral com halteres sentado', muscleGroup: 'Ombros' },
+  { id: 'o_9', name: 'Elevação lateral na polia unilateral (por trás)', muscleGroup: 'Ombros' },
+  { id: 'o_10', name: 'Elevação lateral na polia unilateral (pela frente)', muscleGroup: 'Ombros' },
+  { id: 'o_11', name: 'Elevação lateral na máquina', muscleGroup: 'Ombros' },
+  { id: 'o_12', name: 'Elevação frontal com halteres alternada', muscleGroup: 'Ombros' },
+  { id: 'o_13', name: 'Elevação frontal com halteres simultânea', muscleGroup: 'Ombros' },
+  { id: 'o_14', name: 'Elevação frontal com barra reta', muscleGroup: 'Ombros' },
+  { id: 'o_15', name: 'Elevação frontal com barra W', muscleGroup: 'Ombros' },
+  { id: 'o_16', name: 'Elevação frontal com anilha', muscleGroup: 'Ombros' },
+  { id: 'o_17', name: 'Elevação frontal na polia com corda', muscleGroup: 'Ombros' },
+  { id: 'o_18', name: 'Elevação frontal na polia com barra', muscleGroup: 'Ombros' },
+  { id: 'o_19', name: 'Elevação posterior com halteres (tronco curvado)', muscleGroup: 'Ombros' },
+  { id: 'o_20', name: 'Elevação posterior no voador invertido', muscleGroup: 'Ombros' },
+  { id: 'o_21', name: 'Elevação posterior na polia alta cruzada', muscleGroup: 'Ombros' },
+  { id: 'o_22', name: 'Face pull na polia alta com corda', muscleGroup: 'Ombros' },
 
-  // COSTAS
-  { id: 'ex_costas_1', name: 'Puxada Alta (Frente / Triângulo)', muscleGroup: 'Costas', category: 'Puxar' },
-  { id: 'ex_costas_2', name: 'Remada Curvada com Barra', muscleGroup: 'Costas', category: 'Puxar' },
-  { id: 'ex_costas_3', name: 'Remada Baixa no Cabo (Triângulo)', muscleGroup: 'Costas', category: 'Puxar' },
-  { id: 'ex_costas_4', name: 'Remada Unilateral com Halter (Serrote)', muscleGroup: 'Costas', category: 'Puxar' },
-  { id: 'ex_costas_5', name: 'Pulldown no Cabo (Corda/Barra)', muscleGroup: 'Costas', category: 'Puxar' },
-  { id: 'ex_costas_6', name: 'Barra Fixa (Pull-up / Chin-up)', muscleGroup: 'Costas', category: 'Puxar' },
-  { id: 'ex_costas_7', name: 'Remada Articulada (Máquina)', muscleGroup: 'Costas', category: 'Puxar' },
-  { id: 'ex_costas_8', name: 'Levantamento Terra (Deadlift)', muscleGroup: 'Costas', category: 'Puxar' },
+  // 4. TRAPÉZIO
+  { id: 't_1', name: 'Encolhimento de ombros com barra pela frente', muscleGroup: 'Trapézio' },
+  { id: 't_2', name: 'Encolhimento de ombros com barra por trás', muscleGroup: 'Trapézio' },
+  { id: 't_3', name: 'Encolhimento de ombros com halteres', muscleGroup: 'Trapézio' },
+  { id: 't_4', name: 'Encolhimento de ombros na máquina Smith', muscleGroup: 'Trapézio' },
 
-  // OMBROS
-  { id: 'ex_ombro_1', name: 'Desenvolvimento com Halteres', muscleGroup: 'Ombros', category: 'Empurrar' },
-  { id: 'ex_ombro_2', name: 'Desenvolvimento Militar com Barra', muscleGroup: 'Ombros', category: 'Empurrar' },
-  { id: 'ex_ombro_3', name: 'Elevação Lateral com Halteres', muscleGroup: 'Ombros', category: 'Empurrar' },
-  { id: 'ex_ombro_4', name: 'Elevação Lateral na Polia (Cabo)', muscleGroup: 'Ombros', category: 'Empurrar' },
-  { id: 'ex_ombro_5', name: 'Elevação Frontal (Halteres / Polia)', muscleGroup: 'Ombros', category: 'Empurrar' },
-  { id: 'ex_ombro_6', name: 'Crucifixo Invertido no Peck Deck', muscleGroup: 'Ombros', category: 'Empurrar' },
-  { id: 'ex_ombro_7', name: 'Crucifixo Invertido na Polia', muscleGroup: 'Ombros', category: 'Empurrar' },
-  { id: 'ex_ombro_8', name: 'Encolhimento de Ombros (Trapézio)', muscleGroup: 'Ombros', category: 'Puxar' },
+  // 5. QUADRÍCEPS
+  { id: 'q_1', name: 'Agachamento livre com barra', muscleGroup: 'Quadríceps' },
+  { id: 'q_2', name: 'Agachamento livre com halteres', muscleGroup: 'Quadríceps' },
+  { id: 'q_3', name: 'Agachamento frontal com barra', muscleGroup: 'Quadríceps' },
+  { id: 'q_4', name: 'Agachamento sumô com halter', muscleGroup: 'Quadríceps' },
+  { id: 'q_5', name: 'Agachamento sumô com barra', muscleGroup: 'Quadríceps' },
+  { id: 'q_6', name: 'Agachamento hack na máquina', muscleGroup: 'Quadríceps' },
+  { id: 'q_7', name: 'Agachamento no Smith', muscleGroup: 'Quadríceps' },
+  { id: 'q_8', name: 'Leg press 45°', muscleGroup: 'Quadríceps' },
+  { id: 'q_9', name: 'Leg press 180° (horizontal)', muscleGroup: 'Quadríceps' },
+  { id: 'q_10', name: 'Leg press vertical', muscleGroup: 'Quadríceps' },
+  { id: 'q_11', name: 'Cadeira extensora bilateral', muscleGroup: 'Quadríceps' },
+  { id: 'q_12', name: 'Cadeira extensora unilateral', muscleGroup: 'Quadríceps' },
+  { id: 'q_13', name: 'Passada / Afundo caminhando com halteres', muscleGroup: 'Quadríceps' },
+  { id: 'q_14', name: 'Passada / Afundo estático com barra', muscleGroup: 'Quadríceps' },
+  { id: 'q_15', name: 'Agachamento búlgaro com halteres', muscleGroup: 'Quadríceps' },
+  { id: 'q_16', name: 'Agachamento búlgaro com barra', muscleGroup: 'Quadríceps' },
+  { id: 'q_17', name: 'Sissy squat (agachamento Sissy)', muscleGroup: 'Quadríceps' },
 
-  // BÍCEPS
-  { id: 'ex_bic_1', name: 'Rosca Direta com Barra W', muscleGroup: 'Bíceps', category: 'Braços' },
-  { id: 'ex_bic_2', name: 'Rosca Direta com Halteres', muscleGroup: 'Bíceps', category: 'Braços' },
-  { id: 'ex_bic_3', name: 'Rosca Alternada com Halteres', muscleGroup: 'Bíceps', category: 'Braços' },
-  { id: 'ex_bic_4', name: 'Rosca Martelo com Halteres / Corda', muscleGroup: 'Bíceps', category: 'Braços' },
-  { id: 'ex_bic_5', name: 'Rosca Scott (Banco / Máquina)', muscleGroup: 'Bíceps', category: 'Braços' },
-  { id: 'ex_bic_6', name: 'Rosca Concentrada', muscleGroup: 'Bíceps', category: 'Braços' },
-  { id: 'ex_bic_7', name: 'Rosca no Banco Inclinado 45°', muscleGroup: 'Bíceps', category: 'Braços' },
+  // 6. POSTERIOR DE COXA E GLÚTEOS
+  { id: 'pg_1', name: 'Mesa flexora deitado', muscleGroup: 'Posterior de Coxa e Glúteos' },
+  { id: 'pg_2', name: 'Cadeira flexora sentado', muscleGroup: 'Posterior de Coxa e Glúteos' },
+  { id: 'pg_3', name: 'Flexão de pernas em pé unilateral na máquina', muscleGroup: 'Posterior de Coxa e Glúteos' },
+  { id: 'pg_4', name: 'Stiff com barra', muscleGroup: 'Posterior de Coxa e Glúteos' },
+  { id: 'pg_5', name: 'Stiff com halteres', muscleGroup: 'Posterior de Coxa e Glúteos' },
+  { id: 'pg_6', name: 'Levantamento terra romeno (RDL) com barra', muscleGroup: 'Posterior de Coxa e Glúteos' },
+  { id: 'pg_7', name: 'Levantamento terra romeno (RDL) com halteres', muscleGroup: 'Posterior de Coxa e Glúteos' },
+  { id: 'pg_8', name: 'Elevação pélvica (Hip Thrust) com barra', muscleGroup: 'Posterior de Coxa e Glúteos' },
+  { id: 'pg_9', name: 'Elevação pélvica na máquina', muscleGroup: 'Posterior de Coxa e Glúteos' },
+  { id: 'pg_10', name: 'Elevação pélvica no Smith', muscleGroup: 'Posterior de Coxa e Glúteos' },
+  { id: 'pg_11', name: 'Cadeira adutora', muscleGroup: 'Posterior de Coxa e Glúteos' },
+  { id: 'pg_12', name: 'Cadeira abdutora', muscleGroup: 'Posterior de Coxa e Glúteos' },
+  { id: 'pg_13', name: 'Abdução de quadril no cabo com caneleira', muscleGroup: 'Posterior de Coxa e Glúteos' },
+  { id: 'pg_14', name: 'Adução de quadril no cabo com caneleira', muscleGroup: 'Posterior de Coxa e Glúteos' },
 
-  // TRÍCEPS
-  { id: 'ex_tri_1', name: 'Tríceps Pulley com Corda', muscleGroup: 'Tríceps', category: 'Braços' },
-  { id: 'ex_tri_2', name: 'Tríceps Pulley com Barra Reta/V', muscleGroup: 'Tríceps', category: 'Braços' },
-  { id: 'ex_tri_3', name: 'Tríceps Testa com Barra W / Halteres', muscleGroup: 'Tríceps', category: 'Braços' },
-  { id: 'ex_tri_4', name: 'Tríceps Francês (Halter / Cabo)', muscleGroup: 'Tríceps', category: 'Braços' },
-  { id: 'ex_tri_5', name: 'Tríceps Mergulho nas Paralelas', muscleGroup: 'Tríceps', category: 'Braços' },
-  { id: 'ex_tri_6', name: 'Tríceps Banco (Dips)', muscleGroup: 'Tríceps', category: 'Braços' },
-  { id: 'ex_tri_7', name: 'Tríceps Coice (Kickback)', muscleGroup: 'Tríceps', category: 'Braços' },
+  // 7. PANTURRILHA
+  { id: 'pa_1', name: 'Gêmeos sentado (cadeira de panturrilha)', muscleGroup: 'Panturrilha' },
+  { id: 'pa_2', name: 'Gêmeos em pé no Smith', muscleGroup: 'Panturrilha' },
+  { id: 'pa_3', name: 'Gêmeos em pé na máquina', muscleGroup: 'Panturrilha' },
+  { id: 'pa_4', name: 'Gêmeos no Leg Press', muscleGroup: 'Panturrilha' },
+  { id: 'pa_5', name: 'Panturrilha unilateral em degrau', muscleGroup: 'Panturrilha' },
 
-  // ABDÔMEN & PANTURRILHA & ANTEBRAÇO
-  { id: 'ex_abd_1', name: 'Abdominal Supra (Solo / Declivado)', muscleGroup: 'Abdômen', category: 'Core' },
-  { id: 'ex_abd_2', name: 'Abdominal Infra / Elevação de Pernas', muscleGroup: 'Abdômen', category: 'Core' },
-  { id: 'ex_abd_3', name: 'Prancha Isométrica', muscleGroup: 'Abdômen', category: 'Core' },
-  { id: 'ex_abd_4', name: 'Abdominal na Polia com Corda', muscleGroup: 'Abdômen', category: 'Core' },
-  { id: 'ex_pant_1', name: 'Panturrilha em Pé (Smith / Máquina)', muscleGroup: 'Panturrilha', category: 'Pernas' },
-  { id: 'ex_pant_2', name: 'Panturrilha Sentado (Gêmeos)', muscleGroup: 'Panturrilha', category: 'Pernas' },
-  { id: 'ex_pant_3', name: 'Panturrilha no Leg Press', muscleGroup: 'Panturrilha', category: 'Pernas' },
-  { id: 'ex_ant_1', name: 'Rosca Inversa com Barra', muscleGroup: 'Antebraço', category: 'Braços' },
-  { id: 'ex_ant_2', name: 'Flexão de Punho com Barra', muscleGroup: 'Antebraço', category: 'Braços' },
+  // 8. BÍCEPS
+  { id: 'b_1', name: 'Rosca direta com barra reta', muscleGroup: 'Bíceps' },
+  { id: 'b_2', name: 'Rosca direta com barra W', muscleGroup: 'Bíceps' },
+  { id: 'b_3', name: 'Rosca direta com halteres', muscleGroup: 'Bíceps' },
+  { id: 'b_4', name: 'Rosca alternada com halteres', muscleGroup: 'Bíceps' },
+  { id: 'b_5', name: 'Rosca simultânea com halteres no banco inclinado', muscleGroup: 'Bíceps' },
+  { id: 'b_6', name: 'Rosca Scott com barra W', muscleGroup: 'Bíceps' },
+  { id: 'b_7', name: 'Rosca Scott com halter unilateral', muscleGroup: 'Bíceps' },
+  { id: 'b_8', name: 'Rosca Scott na máquina', muscleGroup: 'Bíceps' },
+  { id: 'b_9', name: 'Rosca martelo com halteres', muscleGroup: 'Bíceps' },
+  { id: 'b_10', name: 'Rosca martelo na polia com corda', muscleGroup: 'Bíceps' },
+  { id: 'b_11', name: 'Rosca concentrada unilateral com halter', muscleGroup: 'Bíceps' },
+  { id: 'b_12', name: 'Rosca na polia alta (duplo bíceps no cabo)', muscleGroup: 'Bíceps' },
+  { id: 'b_13', name: 'Rosca Spider (aranha) com barra', muscleGroup: 'Bíceps' },
+  { id: 'b_14', name: 'Rosca Spider (aranha) com halteres', muscleGroup: 'Bíceps' },
 
-  // CARDIO
-  { id: 'ex_cardio_1', name: 'Esteira - Corrida / Caminhada', muscleGroup: 'Cardio', category: 'Cardio' },
-  { id: 'ex_cardio_2', name: 'Bicicleta Ergométrica', muscleGroup: 'Cardio', category: 'Cardio' },
-  { id: 'ex_cardio_3', name: 'Escada (Stairmaster)', muscleGroup: 'Cardio', category: 'Cardio' },
-  { id: 'ex_cardio_4', name: 'Elíptico / Simulador de Caminhada', muscleGroup: 'Cardio', category: 'Cardio' },
-  { id: 'ex_cardio_5', name: 'Corda / Pular Corda', muscleGroup: 'Cardio', category: 'Cardio' },
-  { id: 'ex_cardio_6', name: 'Remo Ergométrico', muscleGroup: 'Cardio', category: 'Cardio' },
-  { id: 'ex_cardio_7', name: 'Corrida ao Ar Livre', muscleGroup: 'Cardio', category: 'Cardio' }
+  // 9. TRÍCEPS
+  { id: 'tr_1', name: 'Tríceps na polia com corda', muscleGroup: 'Tríceps' },
+  { id: 'tr_2', name: 'Tríceps na polia com barra reta', muscleGroup: 'Tríceps' },
+  { id: 'tr_3', name: 'Tríceps na polia com barra V', muscleGroup: 'Tríceps' },
+  { id: 'tr_4', name: 'Tríceps na polia unilateral com pegada invertida', muscleGroup: 'Tríceps' },
+  { id: 'tr_5', name: 'Tríceps na polia unilateral com pegada neutra', muscleGroup: 'Tríceps' },
+  { id: 'tr_6', name: 'Tríceps testa com barra W', muscleGroup: 'Tríceps' },
+  { id: 'tr_7', name: 'Tríceps testa com barra reta', muscleGroup: 'Tríceps' },
+  { id: 'tr_8', name: 'Tríceps testa com halteres', muscleGroup: 'Tríceps' },
+  { id: 'tr_9', name: 'Tríceps testa na polia baixa', muscleGroup: 'Tríceps' },
+  { id: 'tr_10', name: 'Tríceps francês com halter (duas mãos)', muscleGroup: 'Tríceps' },
+  { id: 'tr_11', name: 'Tríceps francês unilateral com halter', muscleGroup: 'Tríceps' },
+  { id: 'tr_12', name: 'Tríceps francês na polia baixa com corda', muscleGroup: 'Tríceps' },
+  { id: 'tr_13', name: 'Tríceps coice com halter', muscleGroup: 'Tríceps' },
+  { id: 'tr_14', name: 'Tríceps coice na polia', muscleGroup: 'Tríceps' },
+  { id: 'tr_15', name: 'Mergulho em banco', muscleGroup: 'Tríceps' },
+  { id: 'tr_16', name: 'Mergulho em paralelas para tríceps (corpo ereto)', muscleGroup: 'Tríceps' },
+  { id: 'tr_17', name: 'Supino fechado com barra reta', muscleGroup: 'Tríceps' },
+
+  // 10. ANTEBRAÇO
+  { id: 'ant_1', name: 'Rosca inversa com barra reta', muscleGroup: 'Antebraço' },
+  { id: 'ant_2', name: 'Rosca inversa com barra W', muscleGroup: 'Antebraço' },
+  { id: 'ant_3', name: 'Flexão de punho com barra', muscleGroup: 'Antebraço' },
+  { id: 'ant_4', name: 'Flexão de punho com halteres', muscleGroup: 'Antebraço' },
+  { id: 'ant_5', name: 'Extensão de punho com barra', muscleGroup: 'Antebraço' },
+  { id: 'ant_6', name: 'Extensão de punho com halteres', muscleGroup: 'Antebraço' },
+
+  // 11. ABDÔMEN E CORE
+  { id: 'abd_1', name: 'Abdominal infra (elevação de pernas deitado)', muscleGroup: 'Abdômen e Core' },
+  { id: 'abd_2', name: 'Abdominal infra na barra fixa (suspenso)', muscleGroup: 'Abdômen e Core' },
+  { id: 'abd_3', name: 'Abdominal infra no banco declinado', muscleGroup: 'Abdômen e Core' },
+  { id: 'abd_4', name: 'Abdominal supra no solo', muscleGroup: 'Abdômen e Core' },
+  { id: 'abd_5', name: 'Abdominal supra na bola suíça', muscleGroup: 'Abdômen e Core' },
+  { id: 'abd_6', name: 'Abdominal supra na máquina', muscleGroup: 'Abdômen e Core' },
+  { id: 'abd_7', name: 'Abdominal supra na polia alta com corda', muscleGroup: 'Abdômen e Core' },
+  { id: 'abd_8', name: 'Abdominal oblíquo rotacional no solo', muscleGroup: 'Abdômen e Core' },
+  { id: 'abd_9', name: 'Abdominal oblíquo Russian Twist com anilha', muscleGroup: 'Abdômen e Core' },
+  { id: 'abd_10', name: 'Abdominal oblíquo na polia (lenhador)', muscleGroup: 'Abdômen e Core' },
+  { id: 'abd_11', name: 'Prancha isométrica tradicional', muscleGroup: 'Abdômen e Core' },
+  { id: 'abd_12', name: 'Prancha lateral', muscleGroup: 'Abdômen e Core' },
+  { id: 'abd_13', name: 'Prancha dinâmica (subindo e descendo)', muscleGroup: 'Abdômen e Core' },
+  { id: 'abd_14', name: 'Abdominal na roda (Ab Wheel)', muscleGroup: 'Abdômen e Core' },
+
+  // 12. CARDIO
+  { id: 'card_1', name: 'Esteira (Caminhada / Corrida)', muscleGroup: 'Cardio' },
+  { id: 'card_2', name: 'Bicicleta Ergométrica', muscleGroup: 'Cardio' },
+  { id: 'card_3', name: 'Elíptico / Transport', muscleGroup: 'Cardio' },
+  { id: 'card_4', name: 'Remo Seco', muscleGroup: 'Cardio' },
+  { id: 'card_5', name: 'Simulador de Escada', muscleGroup: 'Cardio' },
+  { id: 'card_6', name: 'Corda de Pular', muscleGroup: 'Cardio' },
+  { id: 'card_7', name: 'Natação', muscleGroup: 'Cardio' },
+  { id: 'card_8', name: 'Corrida / Caminhada ao Ar Livre', muscleGroup: 'Cardio' }
 ];
 
-const CATEGORIES = [
+export const CATEGORIES = [
   'Todos',
-  'Quadríceps',
-  'Posterior de Coxa',
-  'Glúteos',
-  'Peito',
+  'Peitoral',
   'Costas',
   'Ombros',
+  'Trapézio',
+  'Quadríceps',
+  'Posterior de Coxa e Glúteos',
+  'Panturrilha',
   'Bíceps',
   'Tríceps',
-  'Abdômen',
-  'Panturrilha',
   'Antebraço',
+  'Abdômen e Core',
   'Cardio'
 ];
 
-export default function ExerciseSelectorModal({ isOpen, onClose, onSelectExercise }) {
+export default function ExerciseSelectorModal({ 
+  isOpen, 
+  onClose, 
+  onSelectExercise,
+  initialCategory = 'Todos'
+}) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('Todos');
+  const [selectedCategory, setSelectedCategory] = useState(initialCategory);
 
   // Custom exercise creator state
   const [isCustomOpen, setIsCustomOpen] = useState(false);
   const [customName, setCustomName] = useState('');
-  const [customGroup, setCustomGroup] = useState('Peito');
+  const [customGroup, setCustomGroup] = useState('Peitoral');
 
   // Filtered exercises
   const filteredExercises = useMemo(() => {
     return EXERCISE_DATABASE.filter(ex => {
       const matchesCategory = selectedCategory === 'Todos' || ex.muscleGroup === selectedCategory;
-      const matchesSearch = !searchTerm || ex.name.toLowerCase().includes(searchTerm.toLowerCase()) || ex.muscleGroup.toLowerCase().includes(searchTerm.toLowerCase());
+      const q = searchTerm.trim().toLowerCase();
+      const matchesSearch = !q || ex.name.toLowerCase().includes(q) || ex.muscleGroup.toLowerCase().includes(q);
       return matchesCategory && matchesSearch;
     });
   }, [searchTerm, selectedCategory]);
@@ -135,12 +244,13 @@ export default function ExerciseSelectorModal({ isOpen, onClose, onSelectExercis
       id: ex.id,
       name: ex.name,
       muscleGroup: ex.muscleGroup,
+      isCardio: ex.muscleGroup === 'Cardio',
       sets: ex.muscleGroup === 'Cardio' 
-        ? [{ setNumber: 1, weight: 0, reps: 0, duration: 30 }] 
+        ? [{ setNumber: 1, durationMinutes: 30, completed: false }] 
         : [
-            { setNumber: 1, weight: 0, reps: 10 },
-            { setNumber: 2, weight: 0, reps: 10 },
-            { setNumber: 3, weight: 0, reps: 10 }
+            { setNumber: 1, weight: 0, reps: 10, completed: false },
+            { setNumber: 2, weight: 0, reps: 10, completed: false },
+            { setNumber: 3, weight: 0, reps: 10, completed: false }
           ]
     });
     onClose();
@@ -154,11 +264,14 @@ export default function ExerciseSelectorModal({ isOpen, onClose, onSelectExercis
       id: 'custom_' + Date.now(),
       name: customName.trim(),
       muscleGroup: customGroup,
-      sets: [
-        { setNumber: 1, weight: 0, reps: 10 },
-        { setNumber: 2, weight: 0, reps: 10 },
-        { setNumber: 3, weight: 0, reps: 10 }
-      ]
+      isCardio: customGroup === 'Cardio',
+      sets: customGroup === 'Cardio'
+        ? [{ setNumber: 1, durationMinutes: 30, completed: false }]
+        : [
+            { setNumber: 1, weight: 0, reps: 10, completed: false },
+            { setNumber: 2, weight: 0, reps: 10, completed: false },
+            { setNumber: 3, weight: 0, reps: 10, completed: false }
+          ]
     });
 
     setCustomName('');
@@ -170,17 +283,17 @@ export default function ExerciseSelectorModal({ isOpen, onClose, onSelectExercis
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Selecionar Exercício"
+      title="Selecionar Exercício ou Cardio"
       size="md"
     >
       <div className="exercise-selector-container">
-        {/* Search input */}
+        {/* Instant Search Bar */}
         <div className="search-bar-wrap">
           <Search size={18} className="search-icon" />
           <input
             type="text"
             className="search-input"
-            placeholder="Pesquisar exercício por nome (ex: Supino, Leg Press, Esteira...)"
+            placeholder="Pesquisar exercício ou cardio (ex: Supino, Leg press, Natação...)"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             autoFocus
@@ -192,7 +305,7 @@ export default function ExerciseSelectorModal({ isOpen, onClose, onSelectExercis
           )}
         </div>
 
-        {/* Category Pills horizontal scroll */}
+        {/* 12 Categories Horizontal Pills */}
         <div className="category-pills-row">
           {CATEGORIES.map(cat => (
             <button
@@ -201,20 +314,23 @@ export default function ExerciseSelectorModal({ isOpen, onClose, onSelectExercis
               className={`cat-pill ${selectedCategory === cat ? 'active' : ''}`}
               onClick={() => setSelectedCategory(cat)}
             >
-              {cat}
+              {cat === 'Cardio' ? '🏃 Cardio' : cat}
             </button>
           ))}
         </div>
 
-        {/* Add custom exercise banner */}
+        {/* Custom exercise trigger button */}
         {!isCustomOpen ? (
           <button 
             type="button" 
             className="custom-ex-trigger-btn"
-            onClick={() => setIsCustomOpen(true)}
+            onClick={() => {
+              if (searchTerm) setCustomName(searchTerm);
+              setIsCustomOpen(true);
+            }}
           >
             <Plus size={16} />
-            <span>Criar Exercício Personalizado</span>
+            <span>Outro / Criar Personalizado {searchTerm ? `("${searchTerm}")` : ''}</span>
           </button>
         ) : (
           <form className="custom-ex-form animate-fade-in" onSubmit={handleAddCustom}>
@@ -222,7 +338,7 @@ export default function ExerciseSelectorModal({ isOpen, onClose, onSelectExercis
               <input
                 type="text"
                 className="custom-name-input"
-                placeholder="Nome do exercício próprio (ex: Supino 45° Máquina)"
+                placeholder="Nome do exercício ou modalidade personalizada"
                 value={customName}
                 onChange={e => setCustomName(e.target.value)}
                 required
@@ -243,19 +359,26 @@ export default function ExerciseSelectorModal({ isOpen, onClose, onSelectExercis
                 Cancelar
               </Button>
               <Button type="submit" variant="primary" size="sm" icon={Check}>
-                Adicionar Ficha
+                Salvar e Adicionar
               </Button>
             </div>
           </form>
         )}
 
-        {/* List of exercises */}
+        {/* Exercises List */}
         <div className="exercise-list-scroll">
           {filteredExercises.length === 0 ? (
             <div className="no-exercises-found">
               <Dumbbell size={32} />
-              <p>Nenhum exercício encontrado para "{searchTerm}".</p>
-              <Button variant="secondary" size="sm" onClick={() => setIsCustomOpen(true)}>
+              <p>Nenhum exercício encontrado com "{searchTerm}".</p>
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                onClick={() => {
+                  setCustomName(searchTerm);
+                  setIsCustomOpen(true);
+                }}
+              >
                 Criar "{searchTerm}" como Personalizado
               </Button>
             </div>
@@ -263,16 +386,35 @@ export default function ExerciseSelectorModal({ isOpen, onClose, onSelectExercis
             filteredExercises.map(ex => (
               <div 
                 key={ex.id}
-                className="exercise-item-card"
+                className={`exercise-item-card ${ex.muscleGroup === 'Cardio' ? 'item-is-cardio' : ''}`}
                 onClick={() => handleSelect(ex)}
               >
                 <div className="ex-item-info">
-                  <span className="ex-item-group-badge">{ex.muscleGroup}</span>
+                  <span className="ex-item-group-badge">
+                    {ex.muscleGroup === 'Cardio' ? '🏃 CARDIO' : ex.muscleGroup}
+                  </span>
                   <strong className="ex-item-name">{ex.name}</strong>
                 </div>
                 <ChevronRight size={18} className="ex-item-arrow" />
               </div>
             ))
+          )}
+
+          {/* Always accessible custom option at bottom */}
+          {!isCustomOpen && (
+            <div 
+              className="exercise-item-card custom-footer-card"
+              onClick={() => {
+                if (searchTerm) setCustomName(searchTerm);
+                setIsCustomOpen(true);
+              }}
+            >
+              <div className="ex-item-info">
+                <span className="ex-item-group-badge" style={{ color: 'var(--accent)' }}>✨ PERSONALIZADO</span>
+                <strong className="ex-item-name">+ Outro / Criar Exercício Personalizado</strong>
+              </div>
+              <Plus size={18} className="text-accent" />
+            </div>
           )}
         </div>
       </div>

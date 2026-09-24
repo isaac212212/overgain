@@ -101,6 +101,22 @@ export default function DashboardPage() {
   const todayTrainedCardio = checkins.some(c => (c.type === 'cardio' || c.isCardio) && isSameDay(c.date, today));
   const todayHasAbsence = (justifiedAbsences || []).some(a => isSameDay(a.date, today));
 
+  const DAYS_OF_WEEK_NAMES = {
+    0: 'Domingo',
+    1: 'Segunda-feira',
+    2: 'Terça-feira',
+    3: 'Quarta-feira',
+    4: 'Quinta-feira',
+    5: 'Sexta-feira',
+    6: 'Sábado'
+  };
+
+  const matchedTodayRoutine = (routines || []).find(r => 
+    r.scheduledDay === todayDayOfWeek || 
+    (r.name && todaySchedule?.workoutLabel && r.name.toLowerCase() === todaySchedule.workoutLabel.toLowerCase()) ||
+    (r.name && todaySchedule?.label && r.name.toLowerCase() === todaySchedule.label.toLowerCase())
+  );
+
   // Handle Cardio Photo Change
   const handleCardioPhotoUpload = (e) => {
     const file = e.target.files[0];
@@ -234,6 +250,125 @@ export default function DashboardPage() {
       <div className="dashboard-grid">
         {/* Left Column: Metrics & Calendar */}
         <div className="dashboard-col-main">
+          {/* Programação do Dia com Treino Principal + Cardio como Sub-Treino Organizado */}
+          <section className="dashboard-section daily-program-section">
+            <div className="section-header">
+              <h2 className="section-title">
+                📅 Programação de Hoje ({DAYS_OF_WEEK_NAMES[todayDayOfWeek]})
+              </h2>
+              <span className="section-badge">
+                {todaySchedule?.hasWorkout && todaySchedule?.hasCardio 
+                  ? 'Treino + Cardio' 
+                  : (todaySchedule?.hasWorkout || todaySchedule?.type === 'workout') 
+                    ? 'Musculação' 
+                    : (todaySchedule?.hasCardio || todaySchedule?.type === 'cardio') 
+                      ? 'Cardio' 
+                      : 'Descanso'}
+              </span>
+            </div>
+
+            <Card className="daily-schedule-unified-card" padding="lg">
+              {/* 1. Treino Principal */}
+              {(todaySchedule?.hasWorkout || todaySchedule?.type === 'workout' || todaySchedule?.type === 'both' || !todaySchedule || todaySchedule.type !== 'rest') && (
+                <div className="daily-schedule-workout-box">
+                  <div className="daily-box-top">
+                    <div className="daily-box-title-group">
+                      <span className="daily-box-tag">🏋️ [TREINO PRINCIPAL]</span>
+                      <h3 className="daily-box-name">
+                        {todaySchedule?.workoutLabel || matchedTodayRoutine?.name || todaySchedule?.label || 'Treino de Musculação'}
+                      </h3>
+                    </div>
+                    {todayTrainedWorkout ? (
+                      <span className="daily-status-pill done">✅ Treino Concluído</span>
+                    ) : (
+                      <span className="daily-status-pill pending">⏳ Pendente</span>
+                    )}
+                  </div>
+
+                  {/* Exercises list preview */}
+                  {matchedTodayRoutine?.exercises?.length > 0 && (
+                    <ul className="daily-exercises-list-preview">
+                      {matchedTodayRoutine.exercises.map((ex, i) => (
+                        <li key={i}>• {ex.name} {ex.muscleGroup ? `(${ex.muscleGroup})` : ''}</li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <div className="daily-box-footer">
+                    <Button 
+                      variant={todayTrainedWorkout ? "secondary" : "primary"}
+                      size="sm"
+                      onClick={() => {
+                        if (matchedTodayRoutine) {
+                          startActiveWorkout(matchedTodayRoutine);
+                        } else {
+                          startActiveWorkout({
+                            id: 'today_workout',
+                            name: todaySchedule?.workoutLabel || 'Treino do Dia',
+                            exercises: []
+                          });
+                        }
+                        navigate('/workout/active');
+                      }}
+                    >
+                      {todayTrainedWorkout ? "Treinar Novamente" : "Iniciar Treino Principal"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* 2. Cardio como Sub-Treino Organizado logo abaixo */}
+              {(todaySchedule?.hasCardio || todaySchedule?.type === 'cardio' || todaySchedule?.type === 'both' || todayTrainedCardio) && (
+                <div className="daily-schedule-cardio-box">
+                  <div className="daily-box-top">
+                    <div className="daily-box-title-group">
+                      <span className="daily-box-tag tag-cardio">🏃 [CARDIO / SUB-TREINO]</span>
+                      <h3 className="daily-box-name name-cardio">
+                        {todaySchedule?.cardioLabel || 'Sessão de Cardio'}
+                      </h3>
+                    </div>
+                    {todayTrainedCardio ? (
+                      <span className="daily-status-pill done">✅ Cardio Concluído</span>
+                    ) : (
+                      <span className="daily-status-pill pending-cardio">⏳ Pendente</span>
+                    )}
+                  </div>
+
+                  <ul className="daily-exercises-list-preview">
+                    <li>• {todaySchedule?.cardioLabel || 'Esteira / Bicicleta / Natação / Corrida'}</li>
+                  </ul>
+
+                  <div className="daily-box-footer">
+                    <Button 
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        if (todaySchedule?.cardioLabel) {
+                          setCardioType(todaySchedule.cardioLabel.split(' ')[0] || 'Corrida');
+                        }
+                        setIsCardioModalOpen(true);
+                      }}
+                      style={{ borderColor: 'rgba(245, 158, 11, 0.4)', color: '#f59e0b' }}
+                    >
+                      {todayTrainedCardio ? "Registrar Novo Cardio" : "Bater Ponto Cardio"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Descanso */}
+              {todaySchedule?.type === 'rest' && !todaySchedule?.hasWorkout && !todaySchedule?.hasCardio && !todayTrainedWorkout && !todayTrainedCardio && (
+                <div className="daily-rest-placeholder">
+                  <span style={{ fontSize: '1.5rem' }}>💤</span>
+                  <div>
+                    <h4>Dia de Descanso Programado</h4>
+                    <p>Aproveite para recuperar as energias ou registre um cardio avulso caso deseje se movimentar hoje!</p>
+                  </div>
+                </div>
+              )}
+            </Card>
+          </section>
+
           {/* Frequency Metrics Grid */}
           <section className="dashboard-section">
             <div className="section-header">

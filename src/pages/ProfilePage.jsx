@@ -301,19 +301,29 @@ export default function ProfilePage() {
         <div className="profile-schedule-days-grid">
           {DAYS_OF_WEEK.map(day => {
             const entry = weeklySchedule?.[day.id] || { type: 'rest', label: 'Descanso' };
-            const isRest = entry.type === 'rest';
-            const isCardio = entry.type === 'cardio';
+            const isRest = entry.type === 'rest' || (!entry.hasWorkout && !entry.hasCardio && entry.type !== 'workout' && entry.type !== 'cardio' && entry.type !== 'both');
+            const hasW = entry.hasWorkout || entry.type === 'workout' || entry.type === 'both';
+            const hasC = entry.hasCardio || entry.type === 'cardio' || entry.type === 'both';
 
             return (
-              <div key={day.id} className={`profile-schedule-day-box ${isRest ? 'is-rest' : isCardio ? 'is-cardio' : 'is-workout'}`}>
+              <div key={day.id} className={`profile-schedule-day-box ${isRest ? 'is-rest' : hasC && !hasW ? 'is-cardio' : 'is-workout'}`}>
                 <span className="p-sched-day-name">{day.name}</span>
-                <div className="p-sched-day-badge">
+                <div className="p-sched-day-badge" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   {isRest ? (
                     <span className="p-sched-rest-text">💤 Descanso</span>
-                  ) : isCardio ? (
-                    <strong className="p-sched-cardio-text">🏃 {entry.label || 'Cardio'}</strong>
                   ) : (
-                    <strong className="p-sched-workout-text">🏋️ {entry.label || 'Treino'}</strong>
+                    <>
+                      {hasW && (
+                        <strong className="p-sched-workout-text" title={entry.workoutLabel || entry.label}>
+                          🏋️ {entry.workoutLabel || entry.label || 'Treino'}
+                        </strong>
+                      )}
+                      {hasC && (
+                        <strong className="p-sched-cardio-text" title={entry.cardioLabel || 'Cardio'}>
+                          🏃 {entry.cardioLabel || 'Cardio'}
+                        </strong>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

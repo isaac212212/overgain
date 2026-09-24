@@ -30,18 +30,17 @@ import { generateId } from '../utils/storage';
 import './RoutinesPage.css';
 
 const DEFAULT_MUSCLE_GROUPS = [
-  'Peito', 
+  'Peitoral', 
   'Costas', 
-  'Pernas', 
-  'Quadríceps',
-  'Posterior de Coxa',
-  'Glúteos',
   'Ombros', 
+  'Trapézio',
+  'Quadríceps', 
+  'Posterior de Coxa e Glúteos', 
+  'Panturrilha', 
   'Bíceps', 
   'Tríceps', 
-  'Abdômen', 
-  'Panturrilha',
-  'Antebraço',
+  'Antebraço', 
+  'Abdômen e Core', 
   'Cardio'
 ];
 
@@ -65,7 +64,8 @@ export default function RoutinesPage() {
     duplicateRoutine,
     startActiveWorkout,
     weeklySchedule,
-    updateWeeklySchedule
+    updateWeeklySchedule,
+    logCardio
   } = useData();
   const { user, updateWeeklyGoal } = useAuth();
   const navigate = useNavigate();
@@ -75,6 +75,7 @@ export default function RoutinesPage() {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [isExerciseSelectorOpen, setIsExerciseSelectorOpen] = useState(false);
+  const [exerciseModalCategory, setExerciseModalCategory] = useState('Todos');
   const [editingRoutine, setEditingRoutine] = useState(null);
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [folderOpen, setFolderOpen] = useState(true);
@@ -266,9 +267,18 @@ export default function RoutinesPage() {
     }
 
     if (formScheduledDay !== '') {
+      const dayId = Number(formScheduledDay);
+      const existing = weeklySchedule?.[dayId] || {};
+      const hasC = existing.hasCardio && existing.cardioLabel?.trim();
       updateWeeklySchedule({
         ...weeklySchedule,
-        [Number(formScheduledDay)]: { type: 'workout', label: formName.trim() }
+        [dayId]: {
+          ...existing,
+          type: hasC ? 'both' : 'workout',
+          hasWorkout: true,
+          workoutLabel: formName.trim(),
+          label: hasC ? `${formName.trim()} + Cardio: ${existing.cardioLabel}` : formName.trim()
+        }
       });
     }
 
@@ -278,7 +288,37 @@ export default function RoutinesPage() {
   // Save Schedule changes
   const handleSaveSchedule = (e) => {
     e.preventDefault();
-    updateWeeklySchedule(tempSchedule);
+    const finalSchedule = {};
+    DAYS_OF_WEEK.forEach(d => {
+      const entry = tempSchedule[d.id] || {};
+      const hasW = Boolean(entry.hasWorkout && entry.workoutLabel?.trim());
+      const hasC = Boolean(entry.hasCardio && entry.cardioLabel?.trim());
+      const wLabel = entry.workoutLabel?.trim() || '';
+      const cLabel = entry.cardioLabel?.trim() || '';
+
+      let type = 'rest';
+      let label = 'Descanso';
+      if (hasW && hasC) {
+        type = 'both';
+        label = `${wLabel} + Cardio: ${cLabel}`;
+      } else if (hasW) {
+        type = 'workout';
+        label = wLabel;
+      } else if (hasC) {
+        type = 'cardio';
+        label = `Cardio: ${cLabel}`;
+      }
+
+      finalSchedule[d.id] = {
+        type,
+        label,
+        hasWorkout: hasW,
+        workoutLabel: wLabel,
+        hasCardio: hasC,
+        cardioLabel: cLabel
+      };
+    });
+    updateWeeklySchedule(finalSchedule);
     setIsScheduleModalOpen(false);
   };
 
@@ -364,6 +404,139 @@ export default function RoutinesPage() {
           <span>Escala Semanal</span>
         </button>
       </div>
+
+      {/* PROGRAMAÇÃO DE HOJE: TREINO PRINCIPAL + CARDIO COMO SUB-TREINO */}
+      {(() => {
+        const todayDayOfWeek = new Date().getDay();
+        const todaySchedule = weeklySchedule?.[todayDayOfWeek];
+        const dayNames = {
+          0: 'Domingo', 1: 'Segunda-feira', 2: 'Terça-feira', 3: 'Quarta-feira',
+          4: 'Quinta-feira', 5: 'Sexta-feira', 6: 'Sábado'
+        };
+        const hasW = todaySchedule?.hasWorkout || todaySchedule?.type === 'workout' || todaySchedule?.type === 'both';
+        const hasC = todaySchedule?.hasCardio || todaySchedule?.type === 'cardio' || todaySchedule?.type === 'both';
+        const wTitle = todaySchedule?.workoutLabel || todaySchedule?.label || 'Treino de Musculação';
+        const cTitle = todaySchedule?.cardioLabel || 'Sessão de Cardio';
+        const matchedRoutine = routines.find(r => r.scheduledDay === todayDayOfWeek || (r.name && todaySchedule?.workoutLabel && r.name.toLowerCase() === todaySchedule.workoutLabel.toLowerCase()));
+
+        if (!hasW && !hasC) return null;
+
+        return (
+          <div className="daily-program-today-box" style={{
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-color)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+            marginBottom: 12
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <span style={{ fontSize: '0.6875rem', fontWeight: 800, color: 'var(--accent)', letterSpacing: 0.5 }}>
+                  PROGRAMAÇÃO DE HOJE
+                </span>
+                <h3 style={{ fontSize: '1.125rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                  {dayNames[todayDayOfWeek].toUpperCase()}
+                </h3>
+              </div>
+              <span style={{
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                padding: '4px 10px',
+                borderRadius: 'var(--radius-full)',
+                background: 'var(--bg-elevated)',
+                color: 'var(--text-secondary)'
+              }}>
+                {hasW && hasC ? 'Musculação + Cardio' : hasW ? 'Musculação' : 'Cardio'}
+              </span>
+            </div>
+
+            {/* Treino Principal */}
+            {hasW && (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+                padding: '12px 14px',
+                background: 'var(--bg-elevated)',
+                borderRadius: 'var(--radius-md)',
+                borderLeft: '4px solid var(--accent)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <span style={{ fontSize: '0.6875rem', fontWeight: 800, color: 'var(--accent)' }}>
+                      🏋️ TREINO PRINCIPAL
+                    </span>
+                    <h4 style={{ fontSize: '0.9375rem', fontWeight: 800, color: 'var(--text-primary)', margin: '2px 0 0 0' }}>
+                      {wTitle}
+                    </h4>
+                  </div>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon={Play}
+                    onClick={() => {
+                      if (matchedRoutine) {
+                        handleStartWorkout(matchedRoutine);
+                      } else {
+                        handleStartEmptyWorkout();
+                      }
+                    }}
+                  >
+                    Iniciar Treino
+                  </Button>
+                </div>
+
+                {matchedRoutine?.exercises?.length > 0 && (
+                  <ul style={{ margin: '4px 0 0 0', paddingLeft: 16, fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                    {matchedRoutine.exercises.map((ex, i) => (
+                      <li key={i}>{ex.name}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {/* Cardio / Sub-treino Organizado logo abaixo */}
+            {hasC && (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+                padding: '12px 14px',
+                background: 'rgba(245, 158, 11, 0.04)',
+                borderRadius: 'var(--radius-md)',
+                border: '1px dashed rgba(245, 158, 11, 0.35)',
+                borderLeft: '4px solid #f59e0b'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <span style={{ fontSize: '0.6875rem', fontWeight: 800, color: '#f59e0b' }}>
+                      🏃 CARDIO / SUB-TREINO
+                    </span>
+                    <h4 style={{ fontSize: '0.9375rem', fontWeight: 800, color: '#f59e0b', margin: '2px 0 0 0' }}>
+                      {cTitle}
+                    </h4>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => navigate('/')}
+                    style={{ borderColor: 'rgba(245, 158, 11, 0.4)', color: '#f59e0b' }}
+                  >
+                    Bater Ponto Cardio
+                  </Button>
+                </div>
+                <p style={{ margin: 0, fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                  • {cTitle}
+                </p>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Minhas rotinas toggle matching Image 1 */}
       <div className="minhas-rotinas-header" onClick={() => setFolderOpen(!folderOpen)}>
@@ -632,25 +805,45 @@ export default function RoutinesPage() {
             </div>
 
             <div className="editor-exercises-section">
-              <div className="editor-section-header">
-                <h3>Exercícios da Rotina ({formExercises.length})</h3>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <Button 
-                    type="button" 
-                    variant="secondary" 
-                    size="sm" 
-                    icon={Plus}
-                    onClick={() => setIsExerciseSelectorOpen(true)}
-                  >
-                    🔍 Catálogo de Exercícios
-                  </Button>
+              <div className="editor-section-header" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Exercícios & Cardio da Ficha ({formExercises.length})</h3>
                   <Button 
                     type="button" 
                     variant="ghost" 
                     size="sm" 
                     onClick={handleAddExercise}
                   >
-                    Linha em Branco
+                    + Linha Vazia
+                  </Button>
+                </div>
+
+                {/* BOTÕES CENTRAIS: Adicionar Exercício e Adicionar Cardio */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, width: '100%' }}>
+                  <Button 
+                    type="button" 
+                    variant="primary" 
+                    size="md" 
+                    icon={Plus}
+                    onClick={() => {
+                      setExerciseModalCategory('Todos');
+                      setIsExerciseSelectorOpen(true);
+                    }}
+                    style={{ justifyContent: 'center' }}
+                  >
+                    Adicionar Exercício
+                  </Button>
+                  <Button 
+                    type="button" 
+                    variant="secondary" 
+                    size="md" 
+                    onClick={() => {
+                      setExerciseModalCategory('Cardio');
+                      setIsExerciseSelectorOpen(true);
+                    }}
+                    style={{ borderColor: '#f59e0b', color: '#f59e0b', justifyContent: 'center' }}
+                  >
+                    🏃 Adicionar Cardio
                   </Button>
                 </div>
               </div>
@@ -826,120 +1019,160 @@ export default function RoutinesPage() {
             <div className="schedule-days-list">
               {DAYS_OF_WEEK.map(day => {
                 const currentEntry = tempSchedule[day.id] || { type: 'rest', label: 'Descanso' };
-                const currentType = currentEntry.type || 'rest';
+                const hasW = currentEntry.hasWorkout ?? (currentEntry.type === 'workout' || currentEntry.type === 'both');
+                const hasC = currentEntry.hasCardio ?? (currentEntry.type === 'cardio' || currentEntry.type === 'both');
+                const wLabel = currentEntry.workoutLabel || (currentEntry.type === 'workout' ? currentEntry.label : '');
+                const cLabel = currentEntry.cardioLabel || (currentEntry.type === 'cardio' ? currentEntry.label : 'Esteira');
 
                 return (
-                  <div key={day.id} className="schedule-day-row">
-                    <span className="schedule-day-name">{day.name}</span>
+                  <div key={day.id} className="schedule-day-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10, padding: '14px', background: 'var(--bg-card)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span className="schedule-day-name" style={{ fontSize: '0.9375rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                        {day.name}
+                      </span>
+                      <button
+                        type="button"
+                        style={{
+                          padding: '4px 10px',
+                          fontSize: '0.6875rem',
+                          fontWeight: 700,
+                          borderRadius: 'var(--radius-full)',
+                          border: '1px solid var(--border-color)',
+                          background: (!hasW && !hasC) ? 'rgba(139, 92, 246, 0.25)' : 'var(--bg-elevated)',
+                          color: (!hasW && !hasC) ? '#a78bfa' : 'var(--text-tertiary)',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => {
+                          setTempSchedule(prev => ({
+                            ...prev,
+                            [day.id]: {
+                              type: 'rest',
+                              label: 'Descanso',
+                              hasWorkout: false,
+                              workoutLabel: '',
+                              hasCardio: false,
+                              cardioLabel: ''
+                            }
+                          }));
+                        }}
+                      >
+                        💤 {!hasW && !hasC ? 'Descanso Ativo' : 'Marcar Descanso'}
+                      </button>
+                    </div>
                     
-                    <div className="schedule-day-controls" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                      {currentType === 'workout' && (
+                    {/* Treino Principal */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px', background: hasW ? 'rgba(56, 189, 248, 0.05)' : 'var(--bg-elevated)', border: `1px solid ${hasW ? 'rgba(56, 189, 248, 0.3)' : 'var(--border-subtle)'}`, borderRadius: 'var(--radius-sm)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: hasW ? '#38bdf8' : 'var(--text-secondary)' }}>
+                          🏋️ TREINO PRINCIPAL (MUSCULAÇÃO)
+                        </span>
+                        <button
+                          type="button"
+                          style={{
+                            padding: '3px 8px',
+                            fontSize: '0.6875rem',
+                            fontWeight: 700,
+                            borderRadius: 'var(--radius-sm)',
+                            border: '1px solid',
+                            borderColor: hasW ? '#38bdf8' : 'var(--border-color)',
+                            background: hasW ? '#38bdf8' : 'transparent',
+                            color: hasW ? '#000' : 'var(--text-secondary)',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => {
+                            setTempSchedule(prev => ({
+                              ...prev,
+                              [day.id]: {
+                                ...currentEntry,
+                                hasWorkout: !hasW,
+                                workoutLabel: !hasW ? (wLabel || 'Treino') : '',
+                                type: (!hasW && hasC) ? 'both' : (!hasW ? 'workout' : (hasC ? 'cardio' : 'rest'))
+                              }
+                            }));
+                          }}
+                        >
+                          {hasW ? 'Ativado' : '+ Ativar Treino'}
+                        </button>
+                      </div>
+
+                      {hasW && (
                         <input
                           type="text"
                           className="schedule-text-input"
-                          placeholder="Nome do treino (ex: PUSH, Pernas...)"
-                          value={currentEntry.label || ''}
+                          placeholder="Nome do treino (ex: PUSH (Peito/Tríceps/Ombro), Pernas...)"
+                          value={wLabel}
                           onChange={e => {
                             const val = e.target.value;
                             setTempSchedule(prev => ({
                               ...prev,
-                              [day.id]: { type: 'workout', label: val }
+                              [day.id]: {
+                                ...currentEntry,
+                                hasWorkout: true,
+                                workoutLabel: val,
+                                type: hasC ? 'both' : 'workout'
+                              }
                             }));
                           }}
                         />
                       )}
+                    </div>
 
-                      {currentType === 'cardio' && (
+                    {/* Cardio / Sub-Treino */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px', background: hasC ? 'rgba(245, 158, 11, 0.05)' : 'var(--bg-elevated)', border: `1px solid ${hasC ? 'rgba(245, 158, 11, 0.35)' : 'var(--border-subtle)'}`, borderRadius: 'var(--radius-sm)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: hasC ? '#f59e0b' : 'var(--text-secondary)' }}>
+                          🏃 CARDIO (SUB-TREINO ORGANIZADO)
+                        </span>
+                        <button
+                          type="button"
+                          style={{
+                            padding: '3px 8px',
+                            fontSize: '0.6875rem',
+                            fontWeight: 700,
+                            borderRadius: 'var(--radius-sm)',
+                            border: '1px solid',
+                            borderColor: hasC ? '#f59e0b' : 'var(--border-color)',
+                            background: hasC ? '#f59e0b' : 'transparent',
+                            color: hasC ? '#000' : 'var(--text-secondary)',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => {
+                            setTempSchedule(prev => ({
+                              ...prev,
+                              [day.id]: {
+                                ...currentEntry,
+                                hasCardio: !hasC,
+                                cardioLabel: !hasC ? (cLabel || 'Natação') : '',
+                                type: (hasW && !hasC) ? 'both' : (!hasC ? 'cardio' : (hasW ? 'workout' : 'rest'))
+                              }
+                            }));
+                          }}
+                        >
+                          {hasC ? 'Ativado' : '+ Ativar Cardio'}
+                        </button>
+                      </div>
+
+                      {hasC && (
                         <input
                           type="text"
                           className="schedule-text-input"
                           style={{ borderColor: 'rgba(245, 158, 11, 0.4)', color: '#f59e0b' }}
-                          placeholder="Tipo de cardio (ex: Corrida, Esteira...)"
-                          value={currentEntry.label || 'Cardio'}
+                          placeholder="Modalidade de cardio (ex: Natação, Esteira 30 min, Bicicleta...)"
+                          value={cLabel}
                           onChange={e => {
                             const val = e.target.value;
                             setTempSchedule(prev => ({
                               ...prev,
-                              [day.id]: { type: 'cardio', label: val }
+                              [day.id]: {
+                                ...currentEntry,
+                                hasCardio: true,
+                                cardioLabel: val,
+                                type: hasW ? 'both' : 'cardio'
+                              }
                             }));
                           }}
                         />
                       )}
-
-                      {currentType === 'rest' && (
-                        <div className="schedule-rest-indicator-badge">
-                          <span>💤 Descanso Programado</span>
-                        </div>
-                      )}
-
-                      {/* 3 Type Pills: Treino, Cardio, Descanso */}
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button
-                          type="button"
-                          style={{
-                            padding: '6px 10px',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            borderRadius: 'var(--radius-sm)',
-                            border: '1px solid var(--border-color)',
-                            background: currentType === 'workout' ? 'var(--accent)' : 'var(--bg-elevated)',
-                            color: currentType === 'workout' ? '#fff' : 'var(--text-secondary)',
-                            cursor: 'pointer'
-                          }}
-                          onClick={() => {
-                            setTempSchedule(prev => ({
-                              ...prev,
-                              [day.id]: { type: 'workout', label: currentEntry.label !== 'Descanso' && currentEntry.label !== 'Cardio' ? currentEntry.label : 'Treino' }
-                            }));
-                          }}
-                        >
-                          Treino
-                        </button>
-
-                        <button
-                          type="button"
-                          style={{
-                            padding: '6px 10px',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            borderRadius: 'var(--radius-sm)',
-                            border: '1px solid var(--border-color)',
-                            background: currentType === 'cardio' ? '#f59e0b' : 'var(--bg-elevated)',
-                            color: currentType === 'cardio' ? '#000' : 'var(--text-secondary)',
-                            cursor: 'pointer'
-                          }}
-                          onClick={() => {
-                            setTempSchedule(prev => ({
-                              ...prev,
-                              [day.id]: { type: 'cardio', label: 'Cardio' }
-                            }));
-                          }}
-                        >
-                          🏃 Cardio
-                        </button>
-
-                        <button
-                          type="button"
-                          style={{
-                            padding: '6px 10px',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            borderRadius: 'var(--radius-sm)',
-                            border: '1px solid var(--border-color)',
-                            background: currentType === 'rest' ? 'rgba(139, 92, 246, 0.25)' : 'var(--bg-elevated)',
-                            color: currentType === 'rest' ? '#a78bfa' : 'var(--text-secondary)',
-                            cursor: 'pointer'
-                          }}
-                          onClick={() => {
-                            setTempSchedule(prev => ({
-                              ...prev,
-                              [day.id]: { type: 'rest', label: 'Descanso' }
-                            }));
-                          }}
-                        >
-                          💤 Descanso
-                        </button>
-                      </div>
                     </div>
                   </div>
                 );
@@ -962,6 +1195,7 @@ export default function RoutinesPage() {
       {isExerciseSelectorOpen && (
         <ExerciseSelectorModal
           isOpen={isExerciseSelectorOpen}
+          initialCategory={exerciseModalCategory}
           onClose={() => setIsExerciseSelectorOpen(false)}
           onSelectExercise={(selectedEx) => {
             setFormExercises(prev => [

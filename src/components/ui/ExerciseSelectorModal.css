@@ -210,3 +210,18 @@
   color: var(--text-tertiary);
   text-align: center;
 }
+
+.exercise-item-card.item-is-cardio {
+  border-left: 3px solid #f59e0b;
+}
+
+.exercise-item-card.item-is-cardio .ex-item-group-badge {
+  color: #f59e0b;
+}
+
+.exercise-item-card.custom-footer-card {
+  border: 1px dashed var(--accent);
+  background: rgba(56, 189, 248, 0.05);
+  margin-top: 8px;
+}
+

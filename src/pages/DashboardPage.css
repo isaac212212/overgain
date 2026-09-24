@@ -15,6 +15,143 @@
   border-bottom: 1px solid var(--border-color);
 }
 
+/* Daily Program Section & Sub-Workout Card */
+.daily-program-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.daily-schedule-unified-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.daily-schedule-workout-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  border-left: 4px solid var(--accent);
+}
+
+.daily-schedule-cardio-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(245, 158, 11, 0.04);
+  border-radius: var(--radius-md);
+  border: 1px dashed rgba(245, 158, 11, 0.35);
+  border-left: 4px solid #f59e0b;
+}
+
+.daily-box-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.daily-box-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.daily-box-tag {
+  font-size: 0.6875rem;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.5px;
+}
+
+.daily-box-tag.tag-cardio {
+  color: #f59e0b;
+}
+
+.daily-box-name {
+  font-size: 1.125rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.daily-box-name.name-cardio {
+  color: #f59e0b;
+}
+
+.daily-status-pill {
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.daily-status-pill.done {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.daily-status-pill.pending {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.daily-status-pill.pending-cardio {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.daily-exercises-list-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 0;
+  list-style: none;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.daily-box-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.daily-rest-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.daily-rest-placeholder h4 {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.daily-rest-placeholder p {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
 .dashboard-greeting {
   display: flex;
   align-items: center;
