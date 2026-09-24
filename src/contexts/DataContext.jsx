@@ -447,7 +447,13 @@ export function DataProvider({ children }) {
 
   // ---- GROUPS SYSTEM (FULL FUNCTIONALITY) ----
   const createGroup = useCallback((groupData) => {
-    const inviteCode = Math.random().toString(36).substr(2, 6).toUpperCase();
+    // Generate clean 6-char alphanumeric invite code
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let inviteCode = '';
+    for (let i = 0; i < 6; i++) {
+      inviteCode += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+
     const creatorMember = {
       id: user?.id || 'usr_' + Date.now(),
       name: user?.name || 'Atleta',
@@ -461,6 +467,7 @@ export function DataProvider({ children }) {
     };
 
     const newGroup = {
+      ...groupData,
       id: 'grp_' + generateId(),
       name: groupData.name.trim(),
       description: groupData.description?.trim() || 'Comunidade de treinos Overgain',
@@ -468,25 +475,40 @@ export function DataProvider({ children }) {
       category: groupData.category || 'Geral',
       isPrivate: groupData.isPrivate || false,
       pin: groupData.pin || null,
-      inviteCode,
+      inviteCode: groupData.inviteCode || inviteCode,
       createdBy: user?.id,
       createdAt: new Date().toISOString(),
-      members: [creatorMember],
-      feed: [],
-      ...groupData
+      members: groupData.members && groupData.members.length > 0 ? groupData.members : [creatorMember],
+      feed: groupData.feed || []
     };
 
-    setAllGroups(prev => [newGroup, ...prev]);
+    setAllGroups(prev => {
+      const exists = prev.some(g => g.id === newGroup.id || (g.inviteCode && g.inviteCode === newGroup.inviteCode));
+      return exists ? prev : [newGroup, ...prev];
+    });
     return newGroup;
   }, [user]);
 
-  const joinGroup = useCallback((inviteCodeOrId, memberProfile, pin) => {
-    const code = inviteCodeOrId.trim().toUpperCase();
+  const joinGroup = useCallback((rawInput, memberProfile, pin) => {
+    if (!rawInput) return { success: false, error: 'Código de convite inválido.' };
+
+    let cleaned = String(rawInput).trim();
+
+    // If full URL was pasted, extract the code/join parameter
+    if (cleaned.includes('join=')) {
+      cleaned = cleaned.split('join=')[1].split('&')[0];
+    } else if (cleaned.includes('/groups/')) {
+      cleaned = cleaned.split('/groups/')[1].split('?')[0].split('/')[0];
+    }
+
+    // Remove common prefixes and symbols
+    const normalizedCode = cleaned.replace(/^OG[-_]/i, '').replace(/[\s-]/g, '').toUpperCase();
+
     const newMember = memberProfile || {
-      id: user?.id,
+      id: user?.id || 'usr_' + Date.now(),
       name: user?.name || 'Atleta',
       username: user?.username || 'atleta',
-      avatar: user?.avatar,
+      avatar: user?.avatar || null,
       role: 'member',
       weeklyGoal: user?.weeklyGoal || 4,
       weeklyCheckins: 0,
@@ -494,28 +516,61 @@ export function DataProvider({ children }) {
       joinedAt: new Date().toISOString()
     };
 
-    // Find group to check PIN
-    const targetGroup = allGroups.find(g => g.inviteCode === code || g.id === inviteCodeOrId);
-    if (!targetGroup) return { success: false, error: 'Grupo não encontrado.' };
+    // Find in allGroups by inviteCode or ID (case-insensitive)
+    let targetGroup = allGroups.find(g => {
+      const gCode = (g.inviteCode || '').toUpperCase();
+      const gId = (g.id || '').toUpperCase();
+      return gCode === normalizedCode || gId === normalizedCode || gCode === cleaned.toUpperCase() || g.id === cleaned;
+    });
 
-    // Verify PIN if group has one
-    if (targetGroup.pin && targetGroup.pin !== pin) {
-      return { success: false, error: 'PIN do grupo incorreto.' };
+    // Support encoded group payload for seamless cross-device sharing without backend
+    if (!targetGroup && (cleaned.startsWith('OGP_') || cleaned.startsWith('ogp_'))) {
+      try {
+        const base64Data = cleaned.slice(4);
+        const parsed = JSON.parse(decodeURIComponent(escape(atob(base64Data))));
+        if (parsed && parsed.name) {
+          targetGroup = {
+            id: parsed.id || 'grp_' + generateId(),
+            name: parsed.name,
+            description: parsed.description || '',
+            photoUrl: parsed.photoUrl || null,
+            category: parsed.category || 'Geral',
+            isPrivate: parsed.isPrivate || false,
+            pin: parsed.pin || null,
+            inviteCode: parsed.inviteCode || normalizedCode,
+            createdBy: parsed.createdBy || 'creator',
+            createdAt: parsed.createdAt || new Date().toISOString(),
+            members: parsed.members || [],
+            feed: parsed.feed || []
+          };
+          setAllGroups(prev => [targetGroup, ...prev.filter(g => g.id !== targetGroup.id)]);
+        }
+      } catch (err) {
+        console.warn('Failed to parse encoded group payload:', err);
+      }
     }
 
-    let found = false;
+    if (!targetGroup) {
+      return { success: false, error: 'Grupo não encontrado. Verifique o código com o criador!' };
+    }
+
+    // Verify PIN if group is protected
+    if (targetGroup.pin && targetGroup.pin !== pin) {
+      return { success: false, error: 'PIN de acesso incorreto para este grupo.' };
+    }
+
+    // Add member if not already joined
     setAllGroups(prev => prev.map(g => {
-      if (g.inviteCode === code || g.id === inviteCodeOrId) {
-        found = true;
-        const exists = g.members?.some(m => m.id === newMember.id);
-        if (!exists) {
+      if (g.id === targetGroup.id || g.inviteCode === targetGroup.inviteCode) {
+        const memberExists = (g.members || []).some(m => m.id === newMember.id);
+        if (!memberExists) {
           return { ...g, members: [...(g.members || []), newMember] };
         }
       }
       return g;
     }));
 
-    return { success: true, found };
+    return { success: true, group: targetGroup };
   }, [user, allGroups]);
 
   const leaveGroup = useCallback((groupId) => {

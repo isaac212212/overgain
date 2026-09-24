@@ -4,8 +4,13 @@
   flex-direction: column;
   gap: var(--space-md);
   max-width: 800px;
+  width: 100%;
   margin: 0 auto;
+  padding-left: 12px;
+  padding-right: 12px;
   padding-bottom: 80px;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 /* Top bar matching Image 3 */
@@ -15,6 +20,9 @@
   justify-content: space-between;
   padding: 8px 0;
   border-bottom: 1px solid var(--border-color);
+  width: 100%;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .top-back-btn {
@@ -32,6 +40,10 @@
 .top-group-title {
   font-size: 1.125rem;
   font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
 }
 
 .top-invite-btn {
@@ -58,6 +70,9 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: 12px 20px;
+  width: 100%;
+  box-sizing: border-box;
+  flex-wrap: wrap;
 }
 
 .leader-pill-item {
@@ -759,26 +774,31 @@
 .ranking-table-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
+  width: 100%;
+  overflow-x: auto;
+  box-sizing: border-box;
 }
 
 .ranking-table-header {
   display: grid;
-  grid-template-columns: 50px 1fr 90px 120px;
+  grid-template-columns: 44px 1fr 80px 100px;
   padding: 10px 14px;
   background: var(--bg-elevated);
   font-size: 0.6875rem;
   font-weight: 700;
   color: var(--text-tertiary);
   text-transform: uppercase;
+  min-width: 320px;
 }
 
 .ranking-table-row {
   display: grid;
-  grid-template-columns: 50px 1fr 90px 120px;
+  grid-template-columns: 44px 1fr 80px 100px;
   align-items: center;
   padding: 12px 14px;
   border-bottom: 1px solid var(--border-color);
   font-size: 0.8125rem;
+  min-width: 320px;
 }
 
 .ranking-table-row:last-child {

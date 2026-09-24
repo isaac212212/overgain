@@ -95,25 +95,14 @@ export default function GroupsPage() {
   const handleJoinGroup = (e) => {
     e.preventDefault();
     setJoinError('');
-    const code = inviteCodeInput.trim().toUpperCase();
-    if (!code) return;
+    const rawInput = inviteCodeInput.trim();
+    if (!rawInput) return;
 
-    const targetGroup = (allGroups || []).find(g => g.inviteCode === code);
-    if (!targetGroup) {
-      setJoinError('Código de convite não encontrado. Verifique o código com o criador do grupo!');
-      return;
-    }
-
-    if (targetGroup.pin && targetGroup.pin !== joinPinInput) {
-      setJoinError('PIN incorreto para este grupo. Solicite ao criador!');
-      return;
-    }
-
-    const res = joinGroup(code, {
-      id: user?.id,
-      name: user?.name || 'Atleta',
-      username: user?.username || 'atleta',
-      avatar: user?.avatar,
+    const res = joinGroup(rawInput, {
+      id: user?.id || 'usr_' + Date.now(),
+      name: user?.name || 'João Silva',
+      username: user?.username || 'joaosilva',
+      avatar: user?.avatar || null,
       role: 'member',
       weeklyGoal: user?.weeklyGoal || 4,
       weeklyCheckins: 0,
@@ -122,15 +111,18 @@ export default function GroupsPage() {
       joinedAt: new Date().toISOString()
     }, joinPinInput);
 
-    if (res && res.error) {
-      setJoinError(res.error);
+    if (!res || !res.success) {
+      setJoinError(res?.error || 'Código de convite não encontrado. Verifique o código com o criador do grupo!');
       return;
     }
 
+    const targetGroupId = res.group?.id || res.foundGroup?.id;
     setIsJoinModalOpen(false);
     setInviteCodeInput('');
     setJoinPinInput('');
-    navigate(`/groups/${targetGroup.id}`);
+    if (targetGroupId) {
+      navigate(`/groups/${targetGroupId}`);
+    }
   };
 
   // 1-click Join from Explore

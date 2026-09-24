@@ -3,12 +3,16 @@
   flex-direction: column;
   gap: var(--space-xl);
   max-width: 900px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* Profile Header Card (Hevy style) */
 .profile-header-card {
   border: 1px solid var(--border-color);
   background: var(--bg-card);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .profile-header-inner {
@@ -27,6 +31,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 200px;
 }
 
 .profile-name-row {
@@ -80,6 +85,7 @@
   display: grid;
   grid-template-columns: 1fr 340px;
   gap: var(--space-lg);
+  width: 100%;
 }
 
 /* Chart Card */
@@ -89,12 +95,16 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .chart-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 /* Section Header Actions */
@@ -126,12 +136,15 @@
 .profile-schedule-card {
   border: 1px solid var(--border-color);
   background: var(--bg-card);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .profile-schedule-days-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
   gap: 10px;
+  width: 100%;
 }
 
 .profile-schedule-day-box {
@@ -147,6 +160,11 @@
 .profile-schedule-day-box.is-workout {
   border-color: rgba(56, 189, 248, 0.3);
   background: rgba(56, 189, 248, 0.04);
+}
+
+.profile-schedule-day-box.is-cardio {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.05);
 }
 
 .profile-schedule-day-box.is-rest {
@@ -171,6 +189,16 @@
   display: block;
 }
 
+.p-sched-cardio-text {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #f59e0b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
 .p-sched-rest-text {
   font-size: 0.75rem;
   font-weight: 600;
@@ -181,6 +209,8 @@
 .profile-measurements-card {
   border: 1px solid var(--border-color);
   background: var(--bg-card);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .profile-imc-banner {
@@ -194,6 +224,8 @@
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
   margin-bottom: var(--space-md);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .imc-left {
@@ -235,6 +267,7 @@
 .imc-meta-pills {
   display: flex;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .imc-stat-pill {
@@ -261,8 +294,9 @@
 
 .profile-measurements-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 12px;
+  width: 100%;
 }
 
 .measurement-cell {
@@ -368,6 +402,7 @@
   padding: 3px;
   gap: 2px;
   border: 1px solid var(--border-color);
+  flex-wrap: wrap;
 }
 
 .timeframe-btn {
@@ -435,6 +470,8 @@
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
   margin-top: 4px;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .evol-main-stat {
@@ -478,7 +515,10 @@
   justify-content: space-between;
   height: 170px;
   padding-top: 10px;
-  gap: 12px;
+  gap: 8px;
+  width: 100%;
+  overflow-x: auto;
+  box-sizing: border-box;
 }
 
 .chart-functional-col {
@@ -488,6 +528,7 @@
   align-items: center;
   height: 100%;
   gap: 6px;
+  min-width: 28px;
 }
 
 .bar-value-top {
@@ -549,6 +590,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .profile-cal-nav {
@@ -630,6 +673,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+  width: 100%;
 }
 
 .history-section-title {
@@ -641,6 +685,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+  width: 100%;
 }
 
 .history-workout-card {
@@ -649,12 +694,16 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .history-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .history-user-info {
@@ -689,6 +738,7 @@
   padding: 10px 14px;
   background: var(--bg-elevated);
   border-radius: var(--radius-sm);
+  flex-wrap: wrap;
 }
 
 .h-metric {
@@ -734,6 +784,8 @@
   align-items: center;
   justify-content: space-between;
   font-size: 0.8125rem;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .line-left {
@@ -774,3 +826,33 @@
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 600px) {
+  .profile-header-inner {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .profile-meta-info {
+    align-items: center;
+  }
+
+  .profile-social-counts {
+    justify-content: center;
+  }
+
+  .measurements-inputs-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-imc-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .evol-growth-badge {
+    align-items: flex-start;
+  }
+}
+

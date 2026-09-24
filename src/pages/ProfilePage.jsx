@@ -81,6 +81,8 @@ export default function ProfilePage() {
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [tempGoal, setTempGoal] = useState(user?.weeklyGoal || 4);
   const [tempPassword, setTempPassword] = useState('');
+  const [tempConfirmPassword, setTempConfirmPassword] = useState('');
+  const [modalPasswordError, setModalPasswordError] = useState('');
 
   // Weekly Schedule Modal state
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
@@ -208,7 +210,7 @@ export default function ProfilePage() {
         <div className="profile-header-inner">
           <Avatar 
             src={user?.avatar} 
-            name={user?.name || 'Isaac Franco'} 
+            name={user?.name || 'João Silva'} 
             size="xl" 
             className="profile-avatar"
           />
@@ -221,7 +223,12 @@ export default function ProfilePage() {
                   variant="secondary" 
                   size="sm" 
                   icon={Shield}
-                  onClick={() => setIsEditingGoal(true)}
+                  onClick={() => {
+                    setTempPassword('');
+                    setTempConfirmPassword('');
+                    setModalPasswordError('');
+                    setIsEditingGoal(true);
+                  }}
                   title="Privacidade & Meta Semanal"
                 >
                   Privacidade
@@ -236,7 +243,7 @@ export default function ProfilePage() {
                 </Button>
               </div>
             </div>
-            <p className="profile-fullname">{user?.name || 'Isaac Franco'}</p>
+            <p className="profile-fullname">{user?.name || 'João Silva'}</p>
 
             {/* Counts */}
             <div className="profile-social-counts">
@@ -295,13 +302,16 @@ export default function ProfilePage() {
           {DAYS_OF_WEEK.map(day => {
             const entry = weeklySchedule?.[day.id] || { type: 'rest', label: 'Descanso' };
             const isRest = entry.type === 'rest';
+            const isCardio = entry.type === 'cardio';
 
             return (
-              <div key={day.id} className={`profile-schedule-day-box ${isRest ? 'is-rest' : 'is-workout'}`}>
+              <div key={day.id} className={`profile-schedule-day-box ${isRest ? 'is-rest' : isCardio ? 'is-cardio' : 'is-workout'}`}>
                 <span className="p-sched-day-name">{day.name}</span>
                 <div className="p-sched-day-badge">
                   {isRest ? (
                     <span className="p-sched-rest-text">💤 Descanso</span>
+                  ) : isCardio ? (
+                    <strong className="p-sched-cardio-text">🏃 {entry.label || 'Cardio'}</strong>
                   ) : (
                     <strong className="p-sched-workout-text">🏋️ {entry.label || 'Treino'}</strong>
                   )}
@@ -902,15 +912,30 @@ export default function ProfilePage() {
             </div>
 
             <div className="settings-section" style={{ marginTop: 16 }}>
-              <label>Alterar Senha da Conta</label>
+              <label>Alterar Senha da Conta (Opcional)</label>
               <input
                 type="password"
                 className="onboarding-input"
                 style={{ marginTop: 8 }}
                 placeholder="Nova senha (mín. 6 caracteres)"
                 value={tempPassword}
-                onChange={e => setTempPassword(e.target.value)}
+                onChange={e => { setTempPassword(e.target.value); setModalPasswordError(''); }}
               />
+              {tempPassword && (
+                <input
+                  type="password"
+                  className="onboarding-input"
+                  style={{ marginTop: 8 }}
+                  placeholder="Confirme a nova senha"
+                  value={tempConfirmPassword}
+                  onChange={e => { setTempConfirmPassword(e.target.value); setModalPasswordError(''); }}
+                />
+              )}
+              {modalPasswordError && (
+                <span style={{ fontSize: '0.75rem', color: 'var(--error)', marginTop: 4, display: 'block', fontWeight: 600 }}>
+                  ⚠️ {modalPasswordError}
+                </span>
+              )}
               <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: 4, display: 'block' }}>
                 Deixe em branco caso não queira alterar sua senha atual.
               </span>
@@ -971,10 +996,22 @@ export default function ProfilePage() {
             <div className="modal-form-actions" style={{ marginTop: 24 }}>
               <Button type="button" variant="ghost" onClick={() => setIsEditingGoal(false)}>Cancelar</Button>
               <Button type="button" variant="primary" onClick={() => {
+                if (tempPassword || tempConfirmPassword) {
+                  if (tempPassword.length < 6) {
+                    setModalPasswordError('A nova senha deve ter no mínimo 6 caracteres.');
+                    return;
+                  }
+                  if (tempPassword !== tempConfirmPassword) {
+                    setModalPasswordError('As senhas não coincidem. Confirme a nova senha.');
+                    return;
+                  }
+                }
+
                 updateWeeklyGoal(tempGoal);
-                if (tempPassword && tempPassword.length >= 6) {
+                if (tempPassword && tempPassword === tempConfirmPassword) {
                   updatePassword(tempPassword);
                   setTempPassword('');
+                  setTempConfirmPassword('');
                 }
                 setIsEditingGoal(false);
               }}>Salvar</Button>

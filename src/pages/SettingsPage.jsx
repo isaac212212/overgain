@@ -31,11 +31,13 @@ export default function SettingsPage() {
   const navigate = useNavigate();
 
   // Form State
-  const [name, setName] = useState(user?.name || 'Isaac Franco');
-  const [username, setUsername] = useState(user?.username || 'isaac223344');
+  const [name, setName] = useState(user?.name || 'João Silva');
+  const [username, setUsername] = useState(user?.username || 'joaosilva');
   const [avatar, setAvatar] = useState(user?.avatar || null);
   const [weeklyGoal, setWeeklyGoal] = useState(user?.weeklyGoal || 4);
-  const [password, setPassword] = useState(user?.password || '');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   const fileInputRef = useRef(null);
@@ -55,15 +57,32 @@ export default function SettingsPage() {
   // Save Settings
   const handleSaveSettings = (e) => {
     e.preventDefault();
+    setPasswordError('');
+
+    if (newPassword || confirmPassword) {
+      if (newPassword.length < 6) {
+        setPasswordError('A nova senha deve ter no mínimo 6 caracteres.');
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        setPasswordError('A confirmação de senha não coincide com a nova senha.');
+        return;
+      }
+    }
+
     updateProfile({
       name: name.trim(),
       username: username.trim(),
       avatar,
       weeklyGoal: Number(weeklyGoal)
     });
-    if (password && password.length >= 6) {
-      updatePassword(password);
+
+    if (newPassword && newPassword === confirmPassword) {
+      updatePassword(newPassword);
+      setNewPassword('');
+      setConfirmPassword('');
     }
+
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
   };
@@ -137,13 +156,30 @@ export default function SettingsPage() {
               />
 
               <Input
-                label="Senha de Acesso à Conta"
+                label="Nova Senha da Conta (Opcional)"
                 type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="Digite para alterar sua senha"
-                helperText="Mínimo 6 caracteres. Usada para entrar no Overgain."
+                value={newPassword}
+                onChange={e => { setNewPassword(e.target.value); setPasswordError(''); }}
+                placeholder="Deixe em branco para manter a atual"
+                helperText="Mínimo 6 caracteres."
               />
+
+              {newPassword && (
+                <Input
+                  label="Confirmar Nova Senha"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={e => { setConfirmPassword(e.target.value); setPasswordError(''); }}
+                  placeholder="Digite novamente a nova senha"
+                  required
+                />
+              )}
+
+              {passwordError && (
+                <div style={{ color: 'var(--error)', fontSize: '0.8125rem', fontWeight: 600, marginTop: 4 }}>
+                  ⚠️ {passwordError}
+                </div>
+              )}
             </div>
           </div>
         </Card>
