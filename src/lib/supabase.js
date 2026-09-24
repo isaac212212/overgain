@@ -27,7 +27,17 @@ const fallbackSupabase = {
   })
 };
 
-// Get Supabase URL and Anon Key from environment or local storage override
+// Fixed default Supabase credentials
+const DEFAULT_SUPABASE_URL = 'https://xhgavvprcjfomnpatjqd.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhoZ2F2dnByY2pmb21ucGF0anFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyNjM1MjIsImV4cCI6MjEwNTgzOTUyMn0.LWACoO0SloKqQ-VBbbDeomi_L67G1LjaywZMKle73As';
+
+const cleanSupabaseUrl = (rawUrl) => {
+  if (!rawUrl) return '';
+  let url = rawUrl.trim();
+  return url.replace(/\/rest\/v1\/?$/i, '').replace(/\/+$/, '');
+};
+
+// Get Supabase URL and Anon Key from environment, local storage, or fixed fallbacks
 const getSupabaseConfig = () => {
   let envUrl = '';
   let envKey = '';
@@ -58,8 +68,9 @@ const getSupabaseConfig = () => {
     // Ignore storage restrictions
   }
 
-  const url = (storedUrl || envUrl || '').trim();
-  const key = (storedKey || envKey || '').trim();
+  const rawUrl = storedUrl || envUrl || DEFAULT_SUPABASE_URL;
+  const url = cleanSupabaseUrl(rawUrl);
+  const key = (storedKey || envKey || DEFAULT_SUPABASE_ANON_KEY).trim();
   const isValidUrl = url.startsWith('http://') || url.startsWith('https://');
 
   return { url, key, isConfigured: Boolean(isValidUrl && key) };

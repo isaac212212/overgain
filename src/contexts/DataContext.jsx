@@ -22,44 +22,16 @@ export function DataProvider({ children }) {
     return user?.id ? storage.get(`schedule_${user.id}`, DEFAULT_WEEKLY_SCHEDULE) : DEFAULT_WEEKLY_SCHEDULE;
   });
 
-  const DEFAULT_CARDIO_ROUTINES = [
-    {
-      id: 'cardio_natacao',
-      name: 'Natação',
-      modality: 'Natação',
-      targetDuration: 40,
-      targetDistance: 1.5,
-      targetCalories: 350,
-      notes: 'Estilos crawl e costas intervalados',
-      scheduledDay: 1,
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 'cardio_esteira',
-      name: 'Esteira (Caminhada / Corrida)',
-      modality: 'Esteira (Caminhada / Corrida)',
-      targetDuration: 30,
-      targetDistance: 4,
-      targetCalories: 280,
-      notes: 'Aquecimento 5 min caminhando + 25 min corrida',
-      scheduledDay: 3,
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 'cardio_bike',
-      name: 'Bicicleta Ergométrica',
-      modality: 'Bicicleta Ergométrica',
-      targetDuration: 35,
-      targetDistance: 12,
-      targetCalories: 300,
-      notes: 'Giro moderado constante',
-      scheduledDay: 5,
-      createdAt: new Date().toISOString()
-    }
-  ];
+  const filterLegacyMockCardios = (cardios) => {
+    if (!Array.isArray(cardios)) return [];
+    return cardios.filter(c => c.id !== 'cardio_natacao' && c.id !== 'cardio_esteira' && c.id !== 'cardio_bike');
+  };
+
+  const DEFAULT_CARDIO_ROUTINES = [];
 
   const [cardioRoutines, setCardioRoutines] = useState(() => {
-    return user?.id ? storage.get(`cardioRoutines_${user.id}`, DEFAULT_CARDIO_ROUTINES) : DEFAULT_CARDIO_ROUTINES;
+    const stored = user?.id ? storage.get(`cardioRoutines_${user.id}`, []) : [];
+    return filterLegacyMockCardios(stored);
   });
 
   const [activeWorkout, setActiveWorkout] = useState(() => {
@@ -74,13 +46,13 @@ export function DataProvider({ children }) {
   useEffect(() => {
     if (user?.id) {
       setRoutines(storage.get(`routines_${user.id}`, []));
-      setCardioRoutines(storage.get(`cardioRoutines_${user.id}`, DEFAULT_CARDIO_ROUTINES));
+      setCardioRoutines(filterLegacyMockCardios(storage.get(`cardioRoutines_${user.id}`, [])));
       setCheckins(storage.get(`checkins_${user.id}`, []));
       setWeeklySchedule(storage.get(`schedule_${user.id}`, DEFAULT_WEEKLY_SCHEDULE));
       setActiveWorkout(storage.get(`activeWorkout_${user.id}`, null));
     } else {
       setRoutines([]);
-      setCardioRoutines(DEFAULT_CARDIO_ROUTINES);
+      setCardioRoutines([]);
       setCheckins([]);
       setWeeklySchedule(DEFAULT_WEEKLY_SCHEDULE);
       setActiveWorkout(null);
@@ -247,8 +219,8 @@ export function DataProvider({ children }) {
         notes: ex.notes || '',
         sets: (ex.sets || []).map((s, idx) => {
           const prevSet = prevSets?.[idx];
-          const prevWeight = prevSet?.weight ?? s.weight ?? 20;
-          const prevReps = prevSet?.reps ?? s.reps ?? 10;
+          const prevWeight = prevSet?.weight ?? s.weight ?? 0;
+          const prevReps = prevSet?.reps ?? s.reps ?? 0;
 
           return {
             setNumber: idx + 1,
@@ -257,7 +229,7 @@ export function DataProvider({ children }) {
             completed: false,
             previousWeight: prevWeight,
             previousReps: prevReps,
-            previous: `${prevWeight}kg x ${prevReps}`
+            previous: (prevWeight > 0 || prevReps > 0) ? `${prevWeight}kg x ${prevReps}` : '—'
           };
         })
       };

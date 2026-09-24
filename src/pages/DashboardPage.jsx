@@ -643,7 +643,7 @@ export default function DashboardPage() {
                     titleText = `Cardio concluído: ${cardio.cardioType || 'Cardio'}`;
                   } else if (absence) {
                     cellClass = 'calendar-day-justified';
-                    dotContent = <span className="cal-justified-icon">⚠️</span>;
+                    dotContent = <div className="calendar-dot-justified-purple" />;
                     titleText = `Falta Justificada: ${absence.reason} (${absence.action === 'adiado' ? 'Adiado' : 'Cancelado'})`;
                   } else if (scheduled?.type === 'cardio') {
                     if (isPast) {

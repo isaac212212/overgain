@@ -248,9 +248,9 @@ export default function ExerciseSelectorModal({
       sets: ex.muscleGroup === 'Cardio' 
         ? [{ setNumber: 1, durationMinutes: 30, completed: false }] 
         : [
-            { setNumber: 1, weight: 0, reps: 10, completed: false },
-            { setNumber: 2, weight: 0, reps: 10, completed: false },
-            { setNumber: 3, weight: 0, reps: 10, completed: false }
+            { setNumber: 1, weight: 0, reps: 0, completed: false },
+            { setNumber: 2, weight: 0, reps: 0, completed: false },
+            { setNumber: 3, weight: 0, reps: 0, completed: false }
           ]
     });
     onClose();
@@ -268,9 +268,9 @@ export default function ExerciseSelectorModal({
       sets: customGroup === 'Cardio'
         ? [{ setNumber: 1, durationMinutes: 30, completed: false }]
         : [
-            { setNumber: 1, weight: 0, reps: 10, completed: false },
-            { setNumber: 2, weight: 0, reps: 10, completed: false },
-            { setNumber: 3, weight: 0, reps: 10, completed: false }
+            { setNumber: 1, weight: 0, reps: 0, completed: false },
+            { setNumber: 2, weight: 0, reps: 0, completed: false },
+            { setNumber: 3, weight: 0, reps: 0, completed: false }
           ]
     });
 

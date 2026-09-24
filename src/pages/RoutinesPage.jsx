@@ -1487,7 +1487,7 @@ export default function RoutinesPage() {
                 name: selectedEx.name,
                 notes: '',
                 sets: selectedEx.sets || [
-                  { setNumber: 1, weight: 0, reps: 10 }
+                  { setNumber: 1, weight: 0, reps: 0 }
                 ]
               }
             ]);

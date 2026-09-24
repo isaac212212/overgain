@@ -531,17 +531,17 @@
 }
 
 .calendar-day-pending-cardio {
-  background: rgba(245, 158, 11, 0.12) !important;
-  color: #f59e0b !important;
+  background: rgba(249, 115, 22, 0.12) !important;
+  color: #f97316 !important;
   font-weight: 700;
-  border: 1px solid rgba(245, 158, 11, 0.35);
+  border: 1px solid rgba(249, 115, 22, 0.35);
 }
 
 .calendar-day-justified {
-  background: rgba(234, 179, 8, 0.10) !important;
-  color: #eab308 !important;
+  background: rgba(168, 85, 247, 0.12) !important;
+  color: #a855f7 !important;
   font-weight: 600;
-  border: 1px dashed rgba(234, 179, 8, 0.4);
+  border: 1px dashed rgba(168, 85, 247, 0.5);
 }
 
 .cal-cardio-done-icon {
@@ -597,11 +597,21 @@
 .calendar-dot-cardio-orange {
   width: 6px;
   height: 6px;
-  background: #f59e0b;
+  background: #f97316;
   border-radius: var(--radius-full);
   position: absolute;
   bottom: 4px;
-  box-shadow: 0 0 6px rgba(245, 158, 11, 0.8);
+  box-shadow: 0 0 6px rgba(249, 115, 22, 0.8);
+}
+
+.calendar-dot-justified-purple {
+  width: 6px;
+  height: 6px;
+  background: #a855f7;
+  border-radius: var(--radius-full);
+  position: absolute;
+  bottom: 4px;
+  box-shadow: 0 0 6px rgba(168, 85, 247, 0.8);
 }
 
 .calendar-legend {
@@ -644,11 +654,11 @@
 }
 
 .legend-dot-orange {
-  background: #f59e0b;
+  background: #f97316;
 }
 
 .legend-dot-justified {
-  background: #eab308;
+  background: #a855f7;
 }
 
 .legend-text-rest {

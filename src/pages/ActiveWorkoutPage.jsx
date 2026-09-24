@@ -645,14 +645,14 @@ export default function ActiveWorkoutPage() {
               name: selectedEx.name,
               muscleGroup: selectedEx.muscleGroup,
               notes: '',
-              sets: (selectedEx.sets || [{ setNumber: 1, weight: 0, reps: 10 }]).map((s, sIdx) => ({
+              sets: (selectedEx.sets || [{ setNumber: 1, weight: 0, reps: 0 }]).map((s, sIdx) => ({
                 setNumber: sIdx + 1,
                 weight: 0,
-                reps: s.reps || 10,
+                reps: s.reps ?? 0,
                 completed: false,
-                previousWeight: 20,
-                previousReps: 10,
-                previous: '20kg x 10'
+                previousWeight: 0,
+                previousReps: 0,
+                previous: '—'
               }))
             });
             updateActiveWorkout({ exercises: updatedExercises });
