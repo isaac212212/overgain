@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Mail, Lock, Eye, EyeOff, User, Target, Check, Sparkles, Download } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, User, Target, Check, Sparkles, Download, AlertCircle, CheckCircle2, KeyRound } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
+import Modal from '../components/ui/Modal';
+import { supabase } from '../lib/supabase';
 import './LoginPage.css';
 
 export default function LoginPage() {
@@ -22,8 +24,53 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
+  // Forgot password modal state
+  const [isForgotOpen, setIsForgotOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSuccess, setForgotSuccess] = useState('');
+  const [forgotError, setForgotError] = useState('');
+
   const { loginWithEmail, registerWithEmail } = useAuth();
   const navigate = useNavigate();
+
+  // Handle Forgot Password
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setForgotError('');
+    setForgotSuccess('');
+    const cleanEmail = forgotEmail.trim().toLowerCase();
+
+    if (!cleanEmail) {
+      setForgotError('Por favor, informe seu e-mail cadastrado.');
+      return;
+    }
+
+    setForgotLoading(true);
+
+    try {
+      const redirectUrl = `${window.location.origin}/reset-password`;
+
+      if (supabase?.auth?.resetPasswordForEmail) {
+        const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+          redirectTo: redirectUrl
+        });
+
+        if (error) {
+          console.warn('Supabase resetPasswordForEmail error:', error.message);
+          setForgotError(error.message || 'Erro ao enviar e-mail de recuperação.');
+        } else {
+          setForgotSuccess('E-mail de recuperação enviado com sucesso! Verifique sua caixa de entrada e a pasta de spam.');
+        }
+      } else {
+        setForgotSuccess('E-mail de recuperação enviado! Verifique sua caixa de entrada.');
+      }
+    } catch (err) {
+      setForgotError(err?.message || 'Falha ao solicitar recuperação. Tente novamente.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
 
   // Handle Submit
   const handleSubmit = async (e) => {
@@ -150,6 +197,23 @@ export default function LoginPage() {
             </button>
           </div>
 
+          {isLogin && (
+            <div className="login-forgot-wrapper">
+              <button
+                type="button"
+                className="login-forgot-btn"
+                onClick={() => {
+                  setForgotEmail(email);
+                  setForgotError('');
+                  setForgotSuccess('');
+                  setIsForgotOpen(true);
+                }}
+              >
+                Esqueci minha senha
+              </button>
+            </div>
+          )}
+
           {!isLogin && (
             <>
               <div className="login-password-wrapper">
@@ -242,6 +306,93 @@ export default function LoginPage() {
           </a>
         </div>
       </div>
+
+      {/* Modal de Recuperação de Senha */}
+      <Modal
+        isOpen={isForgotOpen}
+        onClose={() => {
+          setIsForgotOpen(false);
+          setForgotError('');
+          setForgotSuccess('');
+        }}
+        title="Recuperar Senha"
+        size="sm"
+      >
+        <div className="forgot-modal-content">
+          <div className="forgot-modal-header-icon">
+            <KeyRound size={28} className="text-accent" />
+          </div>
+
+          <p className="forgot-modal-desc">
+            Informe o e-mail cadastrado na sua conta. Enviaremos um link seguro para você redefinir sua senha.
+          </p>
+
+          {forgotError && (
+            <div className="login-error-banner animate-fade-in" style={{ marginBottom: 16 }}>
+              <AlertCircle size={16} />
+              <span>{forgotError}</span>
+            </div>
+          )}
+
+          {forgotSuccess && (
+            <div className="forgot-success-banner animate-scale-in">
+              <CheckCircle2 size={20} />
+              <div>
+                <strong>E-mail enviado com sucesso!</strong>
+                <p style={{ margin: 0, marginTop: 4, fontSize: '0.8125rem' }}>{forgotSuccess}</p>
+              </div>
+            </div>
+          )}
+
+          {!forgotSuccess ? (
+            <form onSubmit={handleForgotPassword} className="forgot-form">
+              <Input
+                label="Seu E-mail Cadastrado"
+                type="email"
+                placeholder="seu@email.com"
+                icon={Mail}
+                value={forgotEmail}
+                onChange={e => setForgotEmail(e.target.value)}
+                required
+                autoFocus
+              />
+
+              <div style={{ marginTop: 16, display: 'flex', gap: 10 }}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="md"
+                  onClick={() => setIsForgotOpen(false)}
+                  disabled={forgotLoading}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="md"
+                  fullWidth
+                  loading={forgotLoading}
+                  disabled={forgotLoading || !forgotEmail}
+                >
+                  Enviar Link
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <Button
+              type="button"
+              variant="primary"
+              size="md"
+              fullWidth
+              onClick={() => setIsForgotOpen(false)}
+              style={{ marginTop: 16 }}
+            >
+              Concluir
+            </Button>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

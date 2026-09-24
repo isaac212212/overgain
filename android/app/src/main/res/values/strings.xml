@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Overgain</string>
+    <string name="title_activity_main">Overgain</string>
+    <string name="package_name">com.overgain.app</string>
+    <string name="custom_url_scheme">com.overgain.app</string>
+</resources>

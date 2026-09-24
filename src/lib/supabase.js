@@ -7,7 +7,9 @@ const fallbackAuth = {
   signInWithPassword: async () => ({ data: { user: null, session: null }, error: new Error('Nuvem não configurada') }),
   signUp: async () => ({ data: { user: null, session: null }, error: new Error('Nuvem não configurada') }),
   signOut: async () => ({ error: null }),
-  getUser: async () => ({ data: { user: null }, error: null })
+  getUser: async () => ({ data: { user: null }, error: null }),
+  resetPasswordForEmail: async () => ({ data: {}, error: null }),
+  updateUser: async () => ({ data: { user: null }, error: null })
 };
 
 const fallbackSupabase = {

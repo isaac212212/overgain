@@ -427,3 +427,75 @@
   color: var(--accent);
   transform: translateY(-1px);
 }
+
+/* Forgot Password Elements */
+.login-forgot-wrapper {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -6px;
+  margin-bottom: 4px;
+}
+
+.login-forgot-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  padding: 4px 0;
+  text-decoration: none;
+}
+
+.login-forgot-btn:hover {
+  text-decoration: underline;
+  color: var(--accent-hover);
+}
+
+.forgot-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-xs) 0;
+}
+
+.forgot-modal-header-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 107, 0, 0.1);
+  border: 1px solid rgba(255, 107, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto var(--space-xs);
+}
+
+.forgot-modal-desc {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  text-align: center;
+  margin: 0;
+}
+
+.forgot-success-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  border-radius: var(--radius-md);
+  color: #22c55e;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.forgot-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+

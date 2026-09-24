@@ -12,6 +12,7 @@ import GroupDetailPage from './pages/GroupDetailPage';
 import ProfilePage from './pages/ProfilePage';
 import SettingsPage from './pages/SettingsPage';
 import ActiveWorkoutPage from './pages/ActiveWorkoutPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 
 // Route protector helper
 function ProtectedRoute({ children }) {
@@ -78,6 +79,7 @@ export default function App() {
     <Routes>
       {/* Public Auth Routes */}
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/onboarding" element={<OnboardingPage />} />
 
       {/* Main Authenticated App Layout */}
