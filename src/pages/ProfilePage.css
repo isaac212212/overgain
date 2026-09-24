@@ -1,0 +1,776 @@
+.profile-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+  max-width: 900px;
+}
+
+/* Profile Header Card (Hevy style) */
+.profile-header-card {
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+}
+
+.profile-header-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xl);
+  flex-wrap: wrap;
+}
+
+.profile-avatar {
+  border: 3px solid var(--accent);
+}
+
+.profile-meta-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profile-name-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.profile-username {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.profile-fullname {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.profile-social-counts {
+  display: flex;
+  gap: var(--space-xl);
+  margin-top: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.count-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.count-item strong {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.count-item span {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.text-flame {
+  color: #f97316 !important;
+}
+
+/* Analytics Grid: Chart + Calendar */
+.profile-analytics-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: var(--space-lg);
+}
+
+/* Chart Card */
+.profile-chart-card {
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.chart-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Section Header Actions */
+.profile-card-header-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: var(--space-md);
+}
+
+.profile-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.125rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.profile-section-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+/* SECTION 1: Escala Semanal de Treinos no Perfil */
+.profile-schedule-card {
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+}
+
+.profile-schedule-days-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 10px;
+}
+
+.profile-schedule-day-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-elevated);
+}
+
+.profile-schedule-day-box.is-workout {
+  border-color: rgba(56, 189, 248, 0.3);
+  background: rgba(56, 189, 248, 0.04);
+}
+
+.profile-schedule-day-box.is-rest {
+  border-color: rgba(139, 92, 246, 0.25);
+  background: rgba(139, 92, 246, 0.04);
+}
+
+.p-sched-day-name {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+.p-sched-workout-text {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #38bdf8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.p-sched-rest-text {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #a78bfa;
+}
+
+/* SECTION 2: Sistema de Medidas Corporais & IMC */
+.profile-measurements-card {
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+}
+
+.profile-imc-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  background: var(--bg-elevated);
+  padding: 16px 20px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  margin-bottom: var(--space-md);
+}
+
+.imc-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.imc-tag {
+  font-size: 0.6875rem;
+  font-weight: 800;
+  color: var(--text-tertiary);
+  letter-spacing: 0.05em;
+}
+
+.imc-number-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.imc-number {
+  font-size: 2rem;
+  font-weight: 900;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.imc-label-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 800;
+  border: 1px solid;
+}
+
+.imc-meta-pills {
+  display: flex;
+  gap: 12px;
+}
+
+.imc-stat-pill {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  text-align: center;
+}
+
+.imc-stat-pill span {
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+.imc-stat-pill strong {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.profile-measurements-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.measurement-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--bg-elevated);
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.m-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+.m-val {
+  font-size: 1.125rem;
+  font-weight: 800;
+  color: #38bdf8;
+}
+
+/* Measurements Modal */
+.measurements-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.modal-imc-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-elevated);
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.modal-imc-left {
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-imc-left span {
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+}
+
+.modal-imc-left strong {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: var(--text-primary);
+}
+
+.modal-imc-status {
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.measurements-inputs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.m-input-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.m-input-field label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.m-input-field input {
+  padding: 10px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.m-input-field input:focus {
+  border-color: var(--accent);
+}
+
+/* SECTION 3: Estatísticas e Gráfico Funcional */
+.chart-timeframe-selector {
+  display: flex;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--border-color);
+}
+
+.timeframe-btn {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.timeframe-btn:hover {
+  color: var(--text-primary);
+}
+
+.timeframe-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.chart-metric-selector-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.c-metric-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.c-metric-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+
+.c-metric-btn.active {
+  background: #38bdf8;
+  color: #000;
+  border-color: #38bdf8;
+  font-weight: 800;
+}
+
+.chart-evolution-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-elevated);
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  margin-top: 4px;
+}
+
+.evol-main-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.evol-number {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: #ffffff;
+}
+
+.evol-sub {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.evol-growth-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.growth-tag {
+  color: #22c55e;
+  font-size: 0.8125rem;
+  font-weight: 800;
+}
+
+.growth-hint {
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+}
+
+/* Functional Bar Chart with Numbers Printed on Top */
+.chart-functional-bars-wrap {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  height: 170px;
+  padding-top: 10px;
+  gap: 12px;
+}
+
+.chart-functional-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  gap: 6px;
+}
+
+.bar-value-top {
+  font-size: 0.6875rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.bar-value-top.is-zero {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.bar-track-functional {
+  flex: 1;
+  width: 100%;
+  max-width: 44px;
+  background: var(--bg-elevated);
+  border-radius: 6px;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+}
+
+.bar-fill-functional {
+  width: 100%;
+  background: #27272a;
+  border-radius: 4px;
+  transition: height 0.3s ease;
+}
+
+.bar-fill-functional.filled {
+  background: linear-gradient(180deg, #38bdf8 0%, #0284c7 100%);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+}
+
+.bar-fill-functional.is-current {
+  background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.4);
+}
+
+.bar-label-bottom {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
+.chart-bar-label {
+  font-size: 0.625rem;
+  color: var(--text-tertiary);
+}
+
+/* Calendar Card (Hevy style with blue solid dots) */
+.profile-calendar-card {
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.profile-cal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cal-nav-title {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.cal-nav-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+}
+
+.cal-nav-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.profile-cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  padding: 6px 0;
+}
+
+.profile-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.profile-cal-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  position: relative;
+}
+
+.profile-cal-cell.outside {
+  opacity: 0.2;
+}
+
+.profile-cal-cell.calendar-day-blank {
+  visibility: hidden;
+  pointer-events: none;
+  background: transparent;
+  border: none;
+}
+
+/* Solid Green Active Dot as requested */
+.profile-cal-cell.trained-active {
+  background: #22c55e !important;
+  color: #ffffff !important;
+  font-weight: 800;
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.6);
+}
+
+/* History Section */
+.profile-history-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.history-section-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.history-cards-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.history-workout-card {
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.history-user-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.history-username {
+  font-weight: 700;
+  font-size: 0.9375rem;
+  display: block;
+}
+
+.history-timestamp {
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+}
+
+.history-routine-badge {
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: var(--accent);
+  background: var(--accent-subtle);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+}
+
+.history-metrics-bar {
+  display: flex;
+  gap: var(--space-xl);
+  padding: 10px 14px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+}
+
+.h-metric {
+  display: flex;
+  flex-direction: column;
+}
+
+.h-metric-label {
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+.h-metric-val {
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.history-photo-preview {
+  width: 100%;
+  max-height: 240px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+
+.history-photo-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.history-exercises-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--border-color);
+  padding-top: var(--space-sm);
+}
+
+.history-exercise-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8125rem;
+}
+
+.line-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.line-sets-badge {
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.line-exercise-name {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.line-notes-badge {
+  font-size: 0.6875rem;
+  color: var(--accent);
+  background: var(--accent-subtle);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.history-session-notes {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border-left: 2px solid var(--accent);
+}
+
+@media (max-width: 900px) {
+  .profile-analytics-grid {
+    grid-template-columns: 1fr;
+  }
+}

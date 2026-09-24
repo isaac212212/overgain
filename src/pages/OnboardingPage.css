@@ -1,0 +1,264 @@
+.onboarding-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-lg);
+  background: var(--bg-primary);
+}
+
+.onboarding-container {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+}
+
+/* Progress */
+.onboarding-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xl);
+  position: relative;
+  margin-bottom: var(--space-md);
+}
+
+.onboarding-progress-dot {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  background: var(--bg-elevated);
+  border: 2px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  transition: all var(--transition-base);
+  z-index: 1;
+}
+
+.onboarding-progress-dot.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-subtle);
+}
+
+.onboarding-progress-dot.completed {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.onboarding-progress-bar {
+  position: absolute;
+  left: 40px;
+  right: 40px;
+  height: 2px;
+  background: var(--border-color);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.onboarding-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--transition-slow);
+  border-radius: var(--radius-full);
+}
+
+/* Step Content */
+.onboarding-step {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.onboarding-step h2 {
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.onboarding-desc {
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+  max-width: 380px;
+}
+
+.onboarding-input {
+  width: 100%;
+  max-width: 360px;
+  padding: 16px 20px;
+  background: var(--bg-input);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  font-size: 1.125rem;
+  font-weight: 600;
+  text-align: center;
+  transition: all var(--transition-fast);
+}
+
+.onboarding-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-subtle);
+}
+
+.onboarding-hint {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+/* Avatar Upload */
+.onboarding-avatar-upload {
+  width: 120px;
+  height: 120px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  position: relative;
+  transition: all var(--transition-fast);
+}
+
+.onboarding-avatar-upload:hover {
+  transform: scale(1.05);
+}
+
+.onboarding-avatar-placeholder {
+  width: 120px;
+  height: 120px;
+  border-radius: var(--radius-full);
+  background: var(--bg-elevated);
+  border: 2px dashed var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.onboarding-avatar-badge {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 32px;
+  height: 32px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid var(--bg-primary);
+}
+
+/* Gender Selection Grid */
+.onboarding-gender-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-md);
+  width: 100%;
+  max-width: 400px;
+}
+
+.gender-select-btn {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-md);
+  padding: 16px 20px;
+  background: var(--bg-elevated);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.gender-select-btn:hover {
+  border-color: var(--text-tertiary);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.gender-select-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+  color: #fff;
+}
+
+.gender-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.gender-label {
+  flex: 1;
+  text-align: left;
+}
+
+.gender-check {
+  color: var(--accent);
+}
+
+/* Goals */
+.onboarding-goals {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-sm);
+  width: 100%;
+  max-width: 400px;
+}
+
+.onboarding-goal-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-md) var(--space-sm);
+  background: var(--bg-elevated);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+  cursor: pointer;
+}
+
+.onboarding-goal-btn:hover {
+  border-color: var(--text-tertiary);
+  background: var(--bg-hover);
+}
+
+.onboarding-goal-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
+.onboarding-goal-num {
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.onboarding-goal-label {
+  font-size: 0.625rem;
+  font-weight: 500;
+  opacity: 0.7;
+}
+
+/* Actions */
+.onboarding-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
