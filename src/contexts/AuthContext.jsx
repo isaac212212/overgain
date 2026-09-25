@@ -1,69 +1,31 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { storage } from '../utils/storage';
 import { DEFAULT_WEEKLY_SCHEDULE } from '../utils/initialData';
 import { 
   supabase, 
   isCloudEnabled, 
   syncFullAccountToCloud, 
-  syncProfileToCloud, 
   syncMeasurementsToCloud, 
   fetchCloudMeasurements, 
   fetchCloudAccountByEmail, 
-  fetchCloudProfile,
+  fetchCloudAccount,
   isUsernameOrNameTaken
 } from '../lib/supabase';
+import { showToast } from './ToastContext';
 
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
-  // All registered accounts map: { [userId]: userObject }
-  const [accounts, setAccounts] = useState(() => storage.get('accounts', {}));
-  
-  // Current active user ID
-  const [currentUserId, setCurrentUserId] = useState(() => storage.get('current_user_id', null));
-  
-  // Active user object
-  const [user, setUser] = useState(() => {
-    const accs = storage.get('accounts', {});
-    const activeId = storage.get('current_user_id', null);
-    if (activeId && accs[activeId]) {
-      return accs[activeId];
-    }
-    return null;
-  });
-
-  // Pending user (during onboarding / registration)
-  const [pendingUser, setPendingUser] = useState(() => storage.get('pending_user', null));
-
-  // Loading state with 2.5-second safety timeout for mobile / APK WebViews
+  // Current active user
+  const [user, setUser] = useState(null);
+  const [pendingUser, setPendingUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Sync user state with accounts & currentUserId
-  useEffect(() => {
-    if (currentUserId && accounts[currentUserId]) {
-      setUser(accounts[currentUserId]);
-      storage.set('current_user_id', currentUserId);
-    } else if (!currentUserId) {
-      setUser(null);
-      storage.remove('current_user_id');
-    }
-    storage.set('accounts', accounts);
-  }, [currentUserId, accounts]);
-
-  // Persist pending user if any
-  useEffect(() => {
-    if (pendingUser) {
-      storage.set('pending_user', pendingUser);
-    } else {
-      storage.remove('pending_user');
-    }
-  }, [pendingUser]);
-
-  // Supabase Auth State Change Listener & Session Verification
+  // Supabase Auth State Change Listener & Cloud Session Verification
   useEffect(() => {
     let timeoutId = null;
     let isCancelled = false;
 
+    // Safety timeout in case network is very slow
     timeoutId = setTimeout(() => {
       if (!isCancelled) {
         setIsLoading(false);
@@ -78,42 +40,42 @@ export function AuthProvider({ children }) {
             const supaUser = data.session.user;
             const supaUserId = supaUser.id;
 
-            // Fetch profile and measurements from cloud
-            const [cloudProf, cloudMeasurements] = await Promise.all([
-              fetchCloudProfile(supaUserId),
+            // Fetch full account profile & measurements directly from Supabase
+            const [cloudAcc, cloudMeasurements] = await Promise.all([
+              fetchCloudAccount(supaUserId),
               fetchCloudMeasurements(supaUserId)
             ]);
 
-            setUser(prev => {
-              const base = prev || accounts[supaUserId] || {};
-              const updated = {
-                ...base,
-                id: supaUserId,
-                name: cloudProf?.name || supaUser.user_metadata?.name || base.name || supaUser.email.split('@')[0],
-                username: cloudProf?.username || supaUser.user_metadata?.username || base.username || supaUser.email.split('@')[0],
-                email: supaUser.email,
-                avatar: cloudProf?.avatar_url || base.avatar || null,
-                weeklyGoal: cloudProf?.weekly_goal || supaUser.user_metadata?.weekly_goal || base.weeklyGoal || 4,
-                gender: cloudProf?.gender || supaUser.user_metadata?.gender || base.gender || 'Masculino',
-                onboarded: true,
-                measurementsHistory: cloudMeasurements || base.measurementsHistory || [],
-                weeklySchedule: base.weeklySchedule || DEFAULT_WEEKLY_SCHEDULE,
-                privacy: base.privacy || {
-                  publicMeasurements: false,
-                  publicRoutines: true,
-                  publicWeights: false,
-                  publicPRs: false,
-                  publicRoutineWeights: false
-                }
-              };
-              setAccounts(accs => ({ ...accs, [supaUserId]: updated }));
-              setCurrentUserId(supaUserId);
-              return updated;
-            });
+            const emailNorm = supaUser.email?.toLowerCase() || '';
+            const fallbackAcc = (!cloudAcc && emailNorm) ? await fetchCloudAccountByEmail(emailNorm) : null;
+            const activeAcc = cloudAcc || fallbackAcc || {};
+
+            const loggedUser = {
+              id: supaUserId,
+              name: activeAcc.name || supaUser.user_metadata?.name || emailNorm.split('@')[0] || 'Atleta',
+              username: activeAcc.username || supaUser.user_metadata?.username || emailNorm.split('@')[0] || 'atleta',
+              email: emailNorm,
+              avatar: activeAcc.avatar || supaUser.user_metadata?.avatar_url || null,
+              gender: activeAcc.gender || supaUser.user_metadata?.gender || 'Masculino',
+              weeklyGoal: activeAcc.weeklyGoal || Number(supaUser.user_metadata?.weekly_goal) || 4,
+              weeklySchedule: activeAcc.weeklySchedule || DEFAULT_WEEKLY_SCHEDULE,
+              onboarded: activeAcc.onboarded !== undefined ? activeAcc.onboarded : true,
+              measurementsHistory: (cloudMeasurements && cloudMeasurements.length > 0) ? cloudMeasurements : (activeAcc.measurementsHistory || []),
+              privacy: activeAcc.privacy || {
+                publicMeasurements: false,
+                publicRoutines: true,
+                publicWeights: false,
+                publicPRs: false,
+                publicRoutineWeights: false
+              },
+              updatedAt: new Date().toISOString()
+            };
+
+            setUser(loggedUser);
           }
         }
       } catch (err) {
-        console.warn('Supabase session verification catch:', err);
+        console.error('Erro na verificação de sessão do Supabase:', err);
       } finally {
         if (!isCancelled) {
           clearTimeout(timeoutId);
@@ -124,14 +86,25 @@ export function AuthProvider({ children }) {
 
     initAuthSession();
 
-    // Listen for auth events (e.g. login/logout in other tabs)
+    // Listen for auth state changes
     let authSub = null;
     try {
       if (isCloudEnabled() && supabase?.auth?.onAuthStateChange) {
-        const { data } = supabase.auth.onAuthStateChange((event, session) => {
+        const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
           if (event === 'SIGNED_OUT') {
-            setCurrentUserId(null);
             setUser(null);
+          } else if (event === 'SIGNED_IN' && session?.user) {
+            const uid = session.user.id;
+            const [cloudAcc, cloudMeasurements] = await Promise.all([
+              fetchCloudAccount(uid),
+              fetchCloudMeasurements(uid)
+            ]);
+            if (cloudAcc) {
+              setUser({
+                ...cloudAcc,
+                measurementsHistory: cloudMeasurements || cloudAcc.measurementsHistory || []
+              });
+            }
           }
         });
         authSub = data?.subscription;
@@ -147,36 +120,29 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  // Login with existing or new Google Account
+  // Login with Google (Direct Cloud Integration)
   const loginWithGoogle = async (googleEmail) => {
     const emailNorm = (googleEmail || 'usuario@gmail.com').trim().toLowerCase();
     
-    let existing = Object.values(accounts).find(
-      acc => acc.email?.toLowerCase() === emailNorm
-    );
-
-    if (!existing) {
-      try {
-        const cloudAcc = await fetchCloudAccountByEmail(emailNorm);
-        if (cloudAcc && cloudAcc.id) {
-          existing = cloudAcc;
-          setAccounts(prev => ({ ...prev, [cloudAcc.id]: cloudAcc }));
-        }
-      } catch (e) {
-        console.warn('Cloud account fetch error:', e);
+    try {
+      const cloudAcc = await fetchCloudAccountByEmail(emailNorm);
+      if (cloudAcc && cloudAcc.onboarded) {
+        const cloudMeasurements = await fetchCloudMeasurements(cloudAcc.id);
+        const fullUser = {
+          ...cloudAcc,
+          measurementsHistory: cloudMeasurements || cloudAcc.measurementsHistory || []
+        };
+        setUser(fullUser);
+        setPendingUser(null);
+        await syncFullAccountToCloud(fullUser);
+        return { isNew: false, user: fullUser };
       }
-    }
-
-    if (existing && existing.onboarded) {
-      setCurrentUserId(existing.id);
-      setUser(existing);
-      setPendingUser(null);
-      syncFullAccountToCloud(existing);
-      return { isNew: false, user: existing };
+    } catch (e) {
+      console.error('Erro ao buscar conta Google no Supabase:', e);
     }
 
     const newPending = {
-      id: existing?.id || 'usr_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
+      id: 'usr_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
       name: emailNorm.split('@')[0],
       email: emailNorm,
       avatar: null,
@@ -201,7 +167,7 @@ export function AuthProvider({ children }) {
     return { isNew: true, pendingUser: newPending };
   };
 
-  // Login with Email & Password (direct Supabase Auth integration + local fallback)
+  // Login with Email & Password (direct Supabase Auth + Cloud Account Lookup)
   const loginWithEmail = async (email, password) => {
     const emailNorm = email.trim().toLowerCase();
 
@@ -212,115 +178,72 @@ export function AuthProvider({ children }) {
           password: password
         });
 
-        if (error) {
-          const msg = (error.message || '').toLowerCase();
-          if (msg.includes('invalid login credentials') || msg.includes('invalid_grant')) {
-            // Check local fallback
-            const localAcc = Object.values(accounts).find(
-              acc => acc.email?.toLowerCase() === emailNorm && (acc.password === password || acc.pin === password)
-            );
-            if (localAcc) {
-              setCurrentUserId(localAcc.id);
-              setUser(localAcc);
-              setPendingUser(null);
-              return { success: true, user: localAcc };
-            }
-
-            return {
-              success: false,
-              error: 'E-mail ou senha incorretos. Verifique e tente novamente.'
-            };
-          }
-          if (msg.includes('email not confirmed')) {
-            return {
-              success: false,
-              error: 'E-mail ainda não confirmado. Verifique sua caixa de entrada.'
-            };
-          }
-          if (msg.includes('rate limit') || msg.includes('security purposes') || error.status === 429) {
-            return {
-              success: false,
-              error: 'Muitas tentativas consecutivas. Aguarde alguns instantes e tente novamente.'
-            };
-          }
-          console.warn('Supabase signIn warning:', error.message);
-        } else if (data?.user) {
-          const cloudUser = data.user;
-          const cloudUserId = cloudUser.id;
-
-          const [cloudProf, cloudMeasurements] = await Promise.all([
-            fetchCloudProfile(cloudUserId),
+        if (!error && data?.user) {
+          const cloudUserId = data.user.id;
+          const [cloudAcc, cloudMeasurements] = await Promise.all([
+            fetchCloudAccount(cloudUserId),
             fetchCloudMeasurements(cloudUserId)
           ]);
 
-          const localExisting = accounts[cloudUserId] || Object.values(accounts).find(a => a.email?.toLowerCase() === emailNorm);
-
           const loggedUser = {
             id: cloudUserId,
-            name: cloudProf?.name || cloudUser.user_metadata?.name || localExisting?.name || emailNorm.split('@')[0],
-            username: cloudProf?.username || cloudUser.user_metadata?.username || localExisting?.username || emailNorm.split('@')[0],
+            name: cloudAcc?.name || data.user.user_metadata?.name || emailNorm.split('@')[0],
+            username: cloudAcc?.username || data.user.user_metadata?.username || emailNorm.split('@')[0],
             email: emailNorm,
-            avatar: cloudProf?.avatar_url || localExisting?.avatar || null,
-            gender: cloudProf?.gender || cloudUser.user_metadata?.gender || localExisting?.gender || 'Masculino',
-            weeklyGoal: cloudProf?.weekly_goal || cloudUser.user_metadata?.weekly_goal || localExisting?.weeklyGoal || 4,
-            weeklySchedule: localExisting?.weeklySchedule || DEFAULT_WEEKLY_SCHEDULE,
-            privacy: localExisting?.privacy || {
+            avatar: cloudAcc?.avatar || data.user.user_metadata?.avatar_url || null,
+            gender: cloudAcc?.gender || data.user.user_metadata?.gender || 'Masculino',
+            weeklyGoal: cloudAcc?.weeklyGoal || Number(data.user.user_metadata?.weekly_goal) || 4,
+            weeklySchedule: cloudAcc?.weeklySchedule || DEFAULT_WEEKLY_SCHEDULE,
+            privacy: cloudAcc?.privacy || {
               publicMeasurements: false,
               publicRoutines: true,
               publicWeights: false,
               publicPRs: false,
               publicRoutineWeights: false
             },
-            measurementsHistory: cloudMeasurements || localExisting?.measurementsHistory || [],
+            measurementsHistory: cloudMeasurements || cloudAcc?.measurementsHistory || [],
             onboarded: true,
             updatedAt: new Date().toISOString()
           };
 
-          setAccounts(prev => {
-            const copy = { ...prev, [loggedUser.id]: loggedUser };
-            storage.set('accounts', copy);
-            return copy;
-          });
-
-          setCurrentUserId(loggedUser.id);
           setUser(loggedUser);
           setPendingUser(null);
-          storage.set('current_user_id', loggedUser.id);
+          await syncFullAccountToCloud(loggedUser);
 
           return { success: true, user: loggedUser };
         }
       }
     } catch (err) {
-      console.warn('Supabase signIn exception, trying local fallback:', err);
+      console.error('Supabase signIn error, checking cloud registry:', err);
     }
 
-    // Local cached accounts fallback
-    const existing = Object.values(accounts).find(
-      acc => acc.email?.toLowerCase() === emailNorm
-    );
-
-    if (!existing) {
-      return {
-        success: false,
-        error: 'E-mail ou senha incorretos. Verifique e tente novamente.'
-      };
+    // Direct Cloud user_data Registry lookup fallback
+    try {
+      const cloudAcc = await fetchCloudAccountByEmail(emailNorm);
+      if (cloudAcc) {
+        const validPassword = cloudAcc.password ? (cloudAcc.password === password) : (cloudAcc.pin === password);
+        if (validPassword) {
+          const cloudMeasurements = await fetchCloudMeasurements(cloudAcc.id);
+          const fullUser = {
+            ...cloudAcc,
+            measurementsHistory: cloudMeasurements || cloudAcc.measurementsHistory || []
+          };
+          setUser(fullUser);
+          setPendingUser(null);
+          return { success: true, user: fullUser };
+        }
+      }
+    } catch (e) {
+      console.error('Cloud account fallback lookup failed:', e);
     }
 
-    const validPassword = existing.password ? (existing.password === password) : (existing.pin === password);
-    if (!validPassword) {
-      return {
-        success: false,
-        error: 'E-mail ou senha incorretos. Verifique e tente novamente.'
-      };
-    }
-
-    setCurrentUserId(existing.id);
-    setUser(existing);
-    setPendingUser(null);
-    return { success: true, user: existing };
+    return {
+      success: false,
+      error: 'E-mail ou senha incorretos. Verifique e tente novamente.'
+    };
   };
 
-  // Register with Email, Password, Name, Gender, Weekly Goal (direct Supabase Auth signUp)
+  // Register with Email & Password (direct Supabase Auth signUp + Cloud user_data sync)
   const registerWithEmail = async (email, password, name, gender = 'Masculino', weeklyGoal = 4) => {
     const emailNorm = email.trim().toLowerCase();
     const cleanName = (name || emailNorm.split('@')[0]).trim();
@@ -332,18 +255,6 @@ export function AuthProvider({ children }) {
       return {
         success: false,
         error: takenCheck.message || 'Este nome de perfil já está em uso por outro atleta. Escolha outro.'
-      };
-    }
-
-    // 2. Also check in locally cached accounts
-    const localTaken = Object.values(accounts).find(
-      acc => (acc.name && acc.name.trim().toLowerCase() === cleanName.toLowerCase()) ||
-             (acc.username && acc.username.trim().toLowerCase() === cleanUsername.toLowerCase())
-    );
-    if (localTaken) {
-      return {
-        success: false,
-        error: 'Este nome de perfil já está em uso por outro atleta. Escolha outro.'
       };
     }
 
@@ -382,18 +293,6 @@ export function AuthProvider({ children }) {
               error: 'Muitas tentativas em pouco tempo. Aguarde alguns segundos e tente novamente.'
             };
           }
-          return {
-            success: false,
-            error: error.message || 'Erro ao realizar cadastro.'
-          };
-        }
-
-        // Check if user already exists (Supabase security returns empty identities)
-        if (data?.user && data.user.identities && data.user.identities.length === 0) {
-          return {
-            success: false,
-            error: 'Este e-mail já está cadastrado. Faça login na sua conta.'
-          };
         }
 
         const userId = data?.user?.id || 'usr_' + Date.now().toString(36);
@@ -419,39 +318,22 @@ export function AuthProvider({ children }) {
           createdAt: new Date().toISOString()
         };
 
-        setAccounts(prev => {
-          const updated = { ...prev, [newUser.id]: newUser };
-          storage.set('accounts', updated);
-          return updated;
-        });
-
-        setCurrentUserId(newUser.id);
         setUser(newUser);
         setPendingUser(null);
-        storage.set('current_user_id', newUser.id);
 
-        // Sync profile to cloud tables
-        syncFullAccountToCloud(newUser);
+        // Sync full account directly to Supabase cloud
+        await syncFullAccountToCloud(newUser);
 
         return { success: true, user: newUser };
       }
     } catch (err) {
-      console.warn('Supabase signUp exception, using local fallback:', err);
+      console.error('Supabase signUp exception:', err);
     }
 
-    // Local fallback if Supabase is offline
-    const existing = Object.values(accounts).find(
-      acc => acc.email?.toLowerCase() === emailNorm
-    );
-    if (existing) {
-      return {
-        success: false,
-        error: 'Este e-mail já está cadastrado. Faça login na sua conta.'
-      };
-    }
-
+    // Direct cloud creation fallback
+    const userId = 'usr_' + Date.now().toString(36);
     const newUser = {
-      id: 'usr_' + Date.now().toString(36),
+      id: userId,
       name: cleanName,
       username: cleanUsername,
       email: emailNorm,
@@ -472,21 +354,14 @@ export function AuthProvider({ children }) {
       createdAt: new Date().toISOString()
     };
 
-    setAccounts(prev => {
-      const updated = { ...prev, [newUser.id]: newUser };
-      storage.set('accounts', updated);
-      return updated;
-    });
-
-    setCurrentUserId(newUser.id);
     setUser(newUser);
     setPendingUser(null);
-    storage.set('current_user_id', newUser.id);
+    await syncFullAccountToCloud(newUser);
 
     return { success: true, user: newUser };
   };
 
-  // Complete onboarding (Name, Photo, Gender, Password)
+  // Complete onboarding
   const completeOnboarding = async (profileData) => {
     const base = pendingUser || user || {};
     const targetName = (profileData.name || base.name || 'Atleta').trim();
@@ -512,18 +387,10 @@ export function AuthProvider({ children }) {
       updatedAt: new Date().toISOString()
     };
 
-    setAccounts(prev => {
-      const updated = { ...prev, [finalUser.id]: finalUser };
-      storage.set('accounts', updated);
-      return updated;
-    });
-
-    setCurrentUserId(finalUser.id);
     setUser(finalUser);
     setPendingUser(null);
-    storage.set('current_user_id', finalUser.id);
 
-    syncFullAccountToCloud(finalUser);
+    await syncFullAccountToCloud(finalUser);
 
     return { success: true, user: finalUser };
   };
@@ -535,7 +402,6 @@ export function AuthProvider({ children }) {
     const targetName = profileData.name !== undefined ? profileData.name.trim() : user.name;
     const targetUsername = profileData.username !== undefined ? profileData.username.trim() : user.username;
 
-    // Check if name or username changed and is taken
     const nameChanged = targetName && targetName.toLowerCase() !== (user.name || '').toLowerCase();
     const userChanged = targetUsername && targetUsername.toLowerCase() !== (user.username || '').toLowerCase();
 
@@ -545,20 +411,6 @@ export function AuthProvider({ children }) {
         return {
           success: false,
           error: takenCheck.message || 'Este nome de perfil já está em uso por outro atleta. Escolha outro.'
-        };
-      }
-
-      // Check locally cached accounts
-      const localTaken = Object.values(accounts).find(
-        acc => String(acc.id) !== String(user.id) && (
-          (acc.name && acc.name.trim().toLowerCase() === targetName.toLowerCase()) ||
-          (acc.username && acc.username.trim().toLowerCase() === targetUsername.toLowerCase())
-        )
-      );
-      if (localTaken) {
-        return {
-          success: false,
-          error: 'Este nome de perfil já está em uso por outro atleta. Escolha outro.'
         };
       }
     }
@@ -572,18 +424,12 @@ export function AuthProvider({ children }) {
     };
 
     setUser(updated);
-    setAccounts(prev => {
-      const copy = { ...prev, [updated.id]: updated };
-      storage.set('accounts', copy);
-      return copy;
-    });
-
-    syncFullAccountToCloud(updated);
+    await syncFullAccountToCloud(updated);
     return { success: true, user: updated };
   };
 
-  // Add measurement
-  const addMeasurement = (measurement) => {
+  // Add measurement (DIRECT SUPABASE PERSISTENCE)
+  const addMeasurement = async (measurement) => {
     if (!user) return;
     const newEntry = {
       id: 'm_' + Date.now().toString(36),
@@ -597,27 +443,17 @@ export function AuthProvider({ children }) {
       measurementsHistory: updatedHistory
     };
     setUser(updated);
-    setAccounts(prev => {
-      const copy = { ...prev, [updated.id]: updated };
-      storage.set('accounts', copy);
-      return copy;
-    });
 
-    syncMeasurementsToCloud(user.id, updatedHistory);
-    syncFullAccountToCloud(updated);
+    await syncMeasurementsToCloud(user.id, updatedHistory);
+    await syncFullAccountToCloud(updated);
   };
 
   // Update PIN
-  const updatePin = (newPin) => {
+  const updatePin = async (newPin) => {
     if (!user) return;
     const updated = { ...user, pin: newPin || null, updatedAt: new Date().toISOString() };
     setUser(updated);
-    setAccounts(prev => {
-      const copy = { ...prev, [updated.id]: updated };
-      storage.set('accounts', copy);
-      return copy;
-    });
-    syncFullAccountToCloud(updated);
+    await syncFullAccountToCloud(updated);
   };
 
   // Update password
@@ -628,87 +464,49 @@ export function AuthProvider({ children }) {
         await supabase.auth.updateUser({ password: newPassword });
       }
     } catch (e) {
-      console.warn('Supabase password update exception:', e);
+      console.error('Supabase password update exception:', e);
     }
     const updated = { ...user, password: newPassword, updatedAt: new Date().toISOString() };
     setUser(updated);
-    setAccounts(prev => {
-      const copy = { ...prev, [updated.id]: updated };
-      storage.set('accounts', copy);
-      return copy;
-    });
-    syncFullAccountToCloud(updated);
+    await syncFullAccountToCloud(updated);
   };
 
   // Update Privacy
-  const updatePrivacy = (privacyUpdates) => {
+  const updatePrivacy = async (privacyUpdates) => {
     if (!user) return;
     const updated = {
       ...user,
       privacy: { ...user.privacy, ...privacyUpdates }
     };
     setUser(updated);
-    setAccounts(prev => {
-      const copy = { ...prev, [updated.id]: updated };
-      storage.set('accounts', copy);
-      return copy;
-    });
-    syncFullAccountToCloud(updated);
+    await syncFullAccountToCloud(updated);
   };
 
   // Update weekly goal
-  const updateWeeklyGoal = (goal) => {
+  const updateWeeklyGoal = async (goal) => {
     if (!user) return;
     const updated = { ...user, weeklyGoal: Number(goal) || 4 };
     setUser(updated);
-    setAccounts(prev => {
-      const copy = { ...prev, [updated.id]: updated };
-      storage.set('accounts', copy);
-      return copy;
-    });
-    syncFullAccountToCloud(updated);
+    await syncFullAccountToCloud(updated);
   };
 
-  // Switch account
-  const switchAccount = (userId) => {
-    if (accounts[userId]) {
-      setCurrentUserId(userId);
-      setUser(accounts[userId]);
-      setPendingUser(null);
-    }
-  };
-
-  // Logout - completely invalidate local user state and cached groups/messages
+  // Logout
   const logout = async () => {
     try {
       if (isCloudEnabled() && supabase?.auth?.signOut) {
         await supabase.auth.signOut();
       }
     } catch (e) {
-      console.warn('Supabase signOut exception:', e);
+      console.error('Supabase signOut exception:', e);
     }
-    setCurrentUserId(null);
     setUser(null);
     setPendingUser(null);
-    storage.remove('current_user_id');
-    storage.remove('pending_user');
-    storage.remove('groups_db');
-    storage.remove('messages_db');
-    storage.remove('absences_db');
-    storage.remove('groups');
-    storage.remove('messages');
-  };
-
-  // Get all registered accounts list
-  const getAllAccounts = () => {
-    return Object.values(accounts);
   };
 
   return (
     <AuthContext.Provider value={{
       user,
       pendingUser,
-      accounts,
       isAuthenticated: Boolean(user && user.onboarded),
       isOnboarded: Boolean(user && user.onboarded),
       isLoading,
@@ -722,8 +520,6 @@ export function AuthProvider({ children }) {
       updatePassword,
       updatePrivacy,
       updateWeeklyGoal,
-      switchAccount,
-      getAllAccounts,
       logout
     }}>
       {children}

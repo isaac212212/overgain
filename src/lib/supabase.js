@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
+import { showToast } from '../contexts/ToastContext';
 
-// Safe Fallback Auth & Client for Mobile WebViews / APK when Supabase keys are not yet configured
+// Safe Fallback Auth & Client for Mobile WebViews / APK when Supabase keys are not configured
 const fallbackAuth = {
   getSession: async () => ({ data: { session: null }, error: null }),
   onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
@@ -25,7 +26,10 @@ const fallbackSupabase = {
       maybeSingle: async () => ({ data: null, error: null }),
       then: (resolve) => resolve({ data: [], error: null })
     }),
-    upsert: async () => ({ data: null, error: null })
+    upsert: async () => ({ data: null, error: null }),
+    delete: () => ({
+      eq: async () => ({ data: null, error: null })
+    })
   })
 };
 
@@ -39,7 +43,6 @@ const cleanSupabaseUrl = (rawUrl) => {
   return url.replace(/\/rest\/v1\/?$/i, '').replace(/\/+$/, '');
 };
 
-// Get Supabase URL and Anon Key from environment, local storage, or fixed fallbacks
 const getSupabaseConfig = () => {
   let envUrl = '';
   let envKey = '';
@@ -53,7 +56,6 @@ const getSupabaseConfig = () => {
     console.warn('Could not read import.meta.env:', e);
   }
 
-  // Also support window / global overrides if injected by Capacitor / Android WebView
   if (!envUrl && typeof window !== 'undefined' && window.__ENV__) {
     envUrl = window.__ENV__.VITE_SUPABASE_URL || '';
     envKey = window.__ENV__.VITE_SUPABASE_ANON_KEY || '';
@@ -91,13 +93,14 @@ if (config.isConfigured) {
       }
     });
   } catch (err) {
-    console.warn('Failed to initialize Supabase client:', err);
+    console.error('Failed to initialize Supabase client:', err);
     realClient = null;
   }
 }
 
-// Guaranteed to NEVER be null or have auth undefined
 export const supabase = realClient || fallbackSupabase;
+
+export const isCloudEnabled = () => Boolean(realClient);
 
 export const setSupabaseCredentials = (url, key) => {
   try {
@@ -114,122 +117,44 @@ export const setSupabaseCredentials = (url, key) => {
   window.location.reload();
 };
 
-export const isCloudEnabled = () => Boolean(realClient);
-
-// ---- CLOUD SYNC: PROFILE ----
-export const syncProfileToCloud = async (userProfile) => {
-  if (!supabase || !userProfile?.id) return null;
-  try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .upsert({
-        id: userProfile.id,
-        name: userProfile.name,
-        username: userProfile.username,
-        avatar_url: userProfile.avatar,
-        weekly_goal: userProfile.weeklyGoal,
-        updated_at: new Date().toISOString()
-      });
-    if (error) console.warn('Supabase profile sync error:', error.message);
-    return data;
-  } catch (err) {
-    console.warn('Supabase profile sync exception:', err);
-    return null;
+// Helper to safely parse jsonb payload or data
+const parseJsonData = (val, defaultValue = null) => {
+  if (val === undefined || val === null) return defaultValue;
+  if (typeof val === 'string') {
+    try {
+      return JSON.parse(val);
+    } catch {
+      return val;
+    }
   }
+  return val;
 };
 
-export const fetchCloudProfile = async (userId) => {
+// ============================================================================
+// 1. ROUTINES (TREINOS / ROTINAS)
+// ============================================================================
+export const syncRoutinesToCloud = async (userId, routines) => {
   if (!supabase || !userId) return null;
   try {
+    const key = `routines_${userId}`;
     const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
+      .from('user_data')
+      .upsert({
+        key,
+        data: routines || [],
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'key' })
+      .select();
+
     if (error) {
-      console.warn('Supabase fetch profile error:', error.message);
+      console.error('Erro ao sincronizar rotinas no Supabase:', error.message || error);
+      showToast('Erro ao salvar rotinas na nuvem. Verifique sua conexão.', 'error');
       return null;
     }
     return data;
   } catch (err) {
-    console.warn('Supabase fetch profile exception:', err);
-    return null;
-  }
-};
-
-// ---- CLOUD SYNC: CHECKINS ----
-export const syncCheckinToCloud = async (checkinData) => {
-  if (!supabase || !checkinData) return null;
-  try {
-    const { data, error } = await supabase
-      .from('checkins')
-      .upsert({
-        id: checkinData.id,
-        user_id: checkinData.userId,
-        type: checkinData.type || 'workout',
-        routine_name: checkinData.routineName,
-        title: checkinData.title,
-        date: checkinData.date,
-        duration_minutes: checkinData.durationMinutes,
-        total_volume_kg: checkinData.totalVolumeKg,
-        photo_url: checkinData.photoUrl,
-        notes: checkinData.notes,
-        payload: JSON.stringify(checkinData)
-      });
-    if (error) console.warn('Supabase checkin sync error:', error.message);
-    return data;
-  } catch (err) {
-    console.warn('Supabase checkin sync exception:', err);
-    return null;
-  }
-};
-
-export const fetchCloudCheckins = async (userId) => {
-  if (!supabase || !userId) return [];
-  try {
-    const { data, error } = await supabase
-      .from('checkins')
-      .select('*')
-      .eq('user_id', userId)
-      .order('date', { ascending: false });
-    if (error) {
-      console.warn('Supabase fetch checkins error:', error.message);
-      return [];
-    }
-    return data.map(item => item.payload ? JSON.parse(item.payload) : {
-      id: item.id,
-      userId: item.user_id,
-      type: item.type,
-      routineName: item.routine_name,
-      title: item.title,
-      date: item.date,
-      durationMinutes: item.duration_minutes,
-      totalVolumeKg: item.total_volume_kg,
-      photoUrl: item.photo_url,
-      notes: item.notes
-    });
-  } catch (err) {
-    console.warn('Supabase fetch checkins exception:', err);
-    return [];
-  }
-};
-
-// ---- CLOUD SYNC: ROUTINES ----
-export const syncRoutinesToCloud = async (userId, routines) => {
-  if (!supabase || !userId || !routines) return null;
-  try {
-    const { data, error } = await supabase
-      .from('user_data')
-      .upsert({
-        user_id: userId,
-        data_key: 'routines',
-        payload: JSON.stringify(routines),
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'user_id,data_key' });
-    if (error) console.warn('Supabase routines sync error:', error.message);
-    return data;
-  } catch (err) {
-    console.warn('Supabase routines sync exception:', err);
+    console.error('Exceção ao sincronizar rotinas no Supabase:', err);
+    showToast('Erro de conexão ao salvar rotinas.', 'error');
     return null;
   }
 };
@@ -237,36 +162,49 @@ export const syncRoutinesToCloud = async (userId, routines) => {
 export const fetchCloudRoutines = async (userId) => {
   if (!supabase || !userId) return null;
   try {
+    const key = `routines_${userId}`;
     const { data, error } = await supabase
       .from('user_data')
-      .select('payload')
-      .eq('user_id', userId)
-      .eq('data_key', 'routines')
+      .select('data')
+      .eq('key', key)
       .maybeSingle();
-    if (error || !data) return null;
-    return JSON.parse(data.payload);
+
+    if (error) {
+      console.error('Erro ao buscar rotinas no Supabase:', error.message || error);
+      return null;
+    }
+    if (!data || data.data === undefined) return null;
+    return parseJsonData(data.data, []);
   } catch (err) {
-    console.warn('Supabase fetch routines exception:', err);
+    console.error('Exceção ao buscar rotinas no Supabase:', err);
     return null;
   }
 };
 
-// ---- CLOUD SYNC: CARDIO ROUTINES ----
+// ============================================================================
+// 2. CARDIO ROUTINES
+// ============================================================================
 export const syncCardioRoutinesToCloud = async (userId, cardioRoutines) => {
-  if (!supabase || !userId || !cardioRoutines) return null;
+  if (!supabase || !userId) return null;
   try {
+    const key = `cardio_${userId}`;
     const { data, error } = await supabase
       .from('user_data')
       .upsert({
-        user_id: userId,
-        data_key: 'cardio_routines',
-        payload: JSON.stringify(cardioRoutines),
+        key,
+        data: cardioRoutines || [],
         updated_at: new Date().toISOString()
-      }, { onConflict: 'user_id,data_key' });
-    if (error) console.warn('Supabase cardio routines sync error:', error.message);
+      }, { onConflict: 'key' })
+      .select();
+
+    if (error) {
+      console.error('Erro ao sincronizar rotinas de cardio no Supabase:', error.message || error);
+      showToast('Erro ao salvar cardios na nuvem.', 'error');
+      return null;
+    }
     return data;
   } catch (err) {
-    console.warn('Supabase cardio routines sync exception:', err);
+    console.error('Exceção ao sincronizar cardios no Supabase:', err);
     return null;
   }
 };
@@ -274,36 +212,48 @@ export const syncCardioRoutinesToCloud = async (userId, cardioRoutines) => {
 export const fetchCloudCardioRoutines = async (userId) => {
   if (!supabase || !userId) return null;
   try {
+    const key = `cardio_${userId}`;
     const { data, error } = await supabase
       .from('user_data')
-      .select('payload')
-      .eq('user_id', userId)
-      .eq('data_key', 'cardio_routines')
+      .select('data')
+      .eq('key', key)
       .maybeSingle();
-    if (error || !data) return null;
-    return JSON.parse(data.payload);
+
+    if (error) {
+      console.error('Erro ao buscar rotinas de cardio no Supabase:', error.message || error);
+      return null;
+    }
+    if (!data || data.data === undefined) return null;
+    return parseJsonData(data.data, []);
   } catch (err) {
-    console.warn('Supabase fetch cardio routines exception:', err);
+    console.error('Exceção ao buscar cardios no Supabase:', err);
     return null;
   }
 };
 
-// ---- CLOUD SYNC: WEEKLY SCHEDULE ----
+// ============================================================================
+// 3. WEEKLY SCHEDULE (CRONOGRAMA SEMANAL)
+// ============================================================================
 export const syncScheduleToCloud = async (userId, schedule) => {
-  if (!supabase || !userId || !schedule) return null;
+  if (!supabase || !userId) return null;
   try {
+    const key = `schedule_${userId}`;
     const { data, error } = await supabase
       .from('user_data')
       .upsert({
-        user_id: userId,
-        data_key: 'schedule',
-        payload: JSON.stringify(schedule),
+        key,
+        data: schedule || {},
         updated_at: new Date().toISOString()
-      }, { onConflict: 'user_id,data_key' });
-    if (error) console.warn('Supabase schedule sync error:', error.message);
+      }, { onConflict: 'key' })
+      .select();
+
+    if (error) {
+      console.error('Erro ao sincronizar cronograma no Supabase:', error.message || error);
+      return null;
+    }
     return data;
   } catch (err) {
-    console.warn('Supabase schedule sync exception:', err);
+    console.error('Exceção ao sincronizar cronograma no Supabase:', err);
     return null;
   }
 };
@@ -311,78 +261,183 @@ export const syncScheduleToCloud = async (userId, schedule) => {
 export const fetchCloudSchedule = async (userId) => {
   if (!supabase || !userId) return null;
   try {
+    const key = `schedule_${userId}`;
     const { data, error } = await supabase
       .from('user_data')
-      .select('payload')
-      .eq('user_id', userId)
-      .eq('data_key', 'schedule')
+      .select('data')
+      .eq('key', key)
       .maybeSingle();
-    if (error || !data) return null;
-    return JSON.parse(data.payload);
+
+    if (error) {
+      console.error('Erro ao buscar cronograma no Supabase:', error.message || error);
+      return null;
+    }
+    if (!data || data.data === undefined) return null;
+    return parseJsonData(data.data, null);
   } catch (err) {
-    console.warn('Supabase fetch schedule exception:', err);
+    console.error('Exceção ao buscar cronograma no Supabase:', err);
     return null;
   }
 };
 
-// ---- CLOUD SYNC: MEASUREMENTS ----
-export const syncMeasurementsToCloud = async (userId, measurements) => {
-  if (!supabase || !userId || !measurements) return null;
+// ============================================================================
+// 4. CHECK-INS / HISTÓRICO DE TREINOS E CARDIOS
+// ============================================================================
+export const syncCheckinsToCloud = async (userId, checkins) => {
+  if (!supabase || !userId) return null;
   try {
+    const key = `checkins_${userId}`;
     const { data, error } = await supabase
       .from('user_data')
       .upsert({
-        user_id: userId,
-        data_key: 'measurements',
-        payload: JSON.stringify(measurements),
+        key,
+        data: checkins || [],
         updated_at: new Date().toISOString()
-      }, { onConflict: 'user_id,data_key' });
-    if (error) console.warn('Supabase measurements sync error:', error.message);
+      }, { onConflict: 'key' })
+      .select();
+
+    if (error) {
+      console.error('Erro ao sincronizar check-ins no Supabase:', error.message || error);
+      showToast('Erro ao salvar check-in na nuvem.', 'error');
+      return null;
+    }
     return data;
   } catch (err) {
-    console.warn('Supabase measurements sync exception:', err);
+    console.error('Exceção ao sincronizar check-ins no Supabase:', err);
+    return null;
+  }
+};
+
+export const syncCheckinToCloud = async (checkinData) => {
+  if (!supabase || !checkinData || !checkinData.userId) return null;
+  try {
+    // 1. Fetch current checkins list
+    const current = await fetchCloudCheckins(checkinData.userId);
+    const exists = current.some(c => c.id === checkinData.id);
+    const updated = exists
+      ? current.map(c => c.id === checkinData.id ? checkinData : c)
+      : [checkinData, ...current];
+
+    return await syncCheckinsToCloud(checkinData.userId, updated);
+  } catch (err) {
+    console.error('Exceção ao salvar checkin individual no Supabase:', err);
+    return null;
+  }
+};
+
+export const fetchCloudCheckins = async (userId) => {
+  if (!supabase || !userId) return [];
+  try {
+    const key = `checkins_${userId}`;
+    const { data, error } = await supabase
+      .from('user_data')
+      .select('data')
+      .eq('key', key)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Erro ao buscar checkins no Supabase:', error.message || error);
+      return [];
+    }
+    if (!data || data.data === undefined) return [];
+    return parseJsonData(data.data, []);
+  } catch (err) {
+    console.error('Exceção ao buscar checkins no Supabase:', err);
+    return [];
+  }
+};
+
+// ============================================================================
+// 5. MEASUREMENTS (MEDIDAS CORPORAIS)
+// ============================================================================
+export const syncMeasurementsToCloud = async (userId, measurements) => {
+  if (!supabase || !userId) return null;
+  try {
+    const key = `measurements_${userId}`;
+    const { data, error } = await supabase
+      .from('user_data')
+      .upsert({
+        key,
+        data: measurements || [],
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'key' })
+      .select();
+
+    if (error) {
+      console.error('Erro ao sincronizar medidas no Supabase:', error.message || error);
+      showToast('Erro ao salvar medidas na nuvem.', 'error');
+      return null;
+    }
+    return data;
+  } catch (err) {
+    console.error('Exceção ao sincronizar medidas no Supabase:', err);
     return null;
   }
 };
 
 export const fetchCloudMeasurements = async (userId) => {
-  if (!supabase || !userId) return null;
+  if (!supabase || !userId) return [];
+  try {
+    const key = `measurements_${userId}`;
+    const { data, error } = await supabase
+      .from('user_data')
+      .select('data')
+      .eq('key', key)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Erro ao buscar medidas no Supabase:', error.message || error);
+      return [];
+    }
+    if (!data || data.data === undefined) return [];
+    return parseJsonData(data.data, []);
+  } catch (err) {
+    console.error('Exceção ao buscar medidas no Supabase:', err);
+    return [];
+  }
+};
+
+// ============================================================================
+// 6. GROUPS & FEED (GRUPOS E COMUNIDADES)
+// ============================================================================
+export const syncGroupsToCloud = async (groupsList) => {
+  if (!supabase) return null;
   try {
     const { data, error } = await supabase
       .from('user_data')
-      .select('payload')
-      .eq('user_id', userId)
-      .eq('data_key', 'measurements')
-      .maybeSingle();
-    if (error || !data) return null;
-    return JSON.parse(data.payload);
+      .upsert({
+        key: 'groups_all',
+        data: groupsList || [],
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'key' })
+      .select();
+
+    if (error) {
+      console.error('Erro ao sincronizar grupos no Supabase:', error.message || error);
+      showToast('Erro ao atualizar dados do grupo na nuvem.', 'error');
+      return null;
+    }
+    return data;
   } catch (err) {
-    console.warn('Supabase fetch measurements exception:', err);
+    console.error('Exceção ao sincronizar grupos no Supabase:', err);
     return null;
   }
 };
 
-// ---- CLOUD SYNC: GROUPS ----
 export const syncGroupToCloud = async (groupData) => {
   if (!supabase || !groupData?.id) return null;
   try {
-    const { data, error } = await supabase
-      .from('groups')
-      .upsert({
-        id: groupData.id,
-        name: groupData.name,
-        description: groupData.description,
-        invite_code: (groupData.inviteCode || '').toUpperCase(),
-        photo_url: groupData.photoUrl,
-        pin: groupData.pin,
-        created_by: groupData.createdBy,
-        created_at: groupData.createdAt,
-        payload: JSON.stringify(groupData)
-      });
-    if (error) console.warn('Supabase group sync error:', error.message);
-    return data;
+    const all = await fetchCloudGroups();
+    const index = all.findIndex(g => g.id === groupData.id);
+    let updated;
+    if (index >= 0) {
+      updated = all.map(g => g.id === groupData.id ? groupData : g);
+    } else {
+      updated = [groupData, ...all];
+    }
+    return await syncGroupsToCloud(updated);
   } catch (err) {
-    console.warn('Supabase group sync exception:', err);
+    console.error('Exceção ao sincronizar grupo individual no Supabase:', err);
     return null;
   }
 };
@@ -391,124 +446,58 @@ export const fetchCloudGroups = async () => {
   if (!supabase) return [];
   try {
     const { data, error } = await supabase
-      .from('groups')
-      .select('*');
+      .from('user_data')
+      .select('data')
+      .eq('key', 'groups_all')
+      .maybeSingle();
+
     if (error) {
-      console.warn('Supabase fetch groups error:', error.message);
+      console.error('Erro ao buscar grupos no Supabase:', error.message || error);
       return [];
     }
-    return data.map(item => item.payload ? (typeof item.payload === 'string' ? JSON.parse(item.payload) : item.payload) : {
-      id: item.id,
-      name: item.name,
-      description: item.description,
-      inviteCode: item.invite_code,
-      photoUrl: item.photo_url,
-      pin: item.pin,
-      createdBy: item.created_by,
-      createdAt: item.created_at,
-      members: [],
-      feed: []
-    });
+    if (!data || data.data === undefined) return [];
+    return parseJsonData(data.data, []);
   } catch (err) {
-    console.warn('Supabase fetch groups exception:', err);
+    console.error('Exceção ao buscar grupos no Supabase:', err);
     return [];
   }
 };
 
-// ---- CLOUD SYNC: FULL ACCOUNT REGISTRY ----
-export const syncFullAccountToCloud = async (user) => {
-  if (!supabase || !user?.id) return null;
-  try {
-    // 1. Sync public profile
-    await syncProfileToCloud(user);
-
-    // 2. Sync full account payload to user_data for cross-device authentication
-    const { data, error } = await supabase
-      .from('user_data')
-      .upsert({
-        user_id: user.id,
-        data_key: 'account_data',
-        payload: JSON.stringify({
-          id: user.id,
-          name: user.name,
-          username: user.username,
-          email: user.email,
-          password: user.password,
-          pin: user.pin,
-          gender: user.gender,
-          avatar: user.avatar,
-          weeklyGoal: user.weeklyGoal,
-          weeklySchedule: user.weeklySchedule,
-          privacy: user.privacy,
-          measurementsHistory: user.measurementsHistory,
-          onboarded: user.onboarded,
-          updatedAt: new Date().toISOString()
-        }),
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'user_id,data_key' });
-    if (error) console.warn('Supabase account sync error:', error.message);
-    return data;
-  } catch (err) {
-    console.warn('Supabase account sync exception:', err);
-    return null;
-  }
-};
-
-export const fetchCloudAccountByEmail = async (email) => {
-  if (!supabase || !email) return null;
-  try {
-    const { data, error } = await supabase
-      .from('user_data')
-      .select('payload')
-      .eq('data_key', 'account_data');
-    if (error || !data) return null;
-    for (const item of data) {
-      if (item.payload) {
-        const parsed = JSON.parse(item.payload);
-        if (parsed.email?.toLowerCase() === email.trim().toLowerCase()) {
-          return parsed;
-        }
-      }
-    }
-    return null;
-  } catch (err) {
-    console.warn('Supabase fetch account by email exception:', err);
-    return null;
-  }
-};
-
-// ---- CLOUD SYNC: DELETE GROUP ----
 export const deleteCloudGroup = async (groupId) => {
   if (!supabase || !groupId) return null;
   try {
-    const { data, error } = await supabase
-      .from('groups')
-      .delete()
-      .eq('id', groupId);
-    if (error) console.warn('Supabase delete group error:', error.message);
-    return data;
+    const all = await fetchCloudGroups();
+    const filtered = all.filter(g => g.id !== groupId);
+    return await syncGroupsToCloud(filtered);
   } catch (err) {
-    console.warn('Supabase delete group exception:', err);
+    console.error('Exceção ao deletar grupo no Supabase:', err);
     return null;
   }
 };
 
-// ---- CLOUD SYNC: MESSAGES ----
+// ============================================================================
+// 7. GROUP CHAT MESSAGES
+// ============================================================================
 export const syncMessagesToCloud = async (groupId, messages) => {
   if (!supabase || !groupId) return null;
   try {
+    const key = `messages_${groupId}`;
     const { data, error } = await supabase
       .from('user_data')
       .upsert({
-        user_id: 'global_messages',
-        data_key: `messages_${groupId}`,
-        payload: JSON.stringify(messages),
+        key,
+        data: messages || [],
         updated_at: new Date().toISOString()
-      }, { onConflict: 'user_id,data_key' });
-    if (error) console.warn('Supabase messages sync error:', error.message);
+      }, { onConflict: 'key' })
+      .select();
+
+    if (error) {
+      console.error('Erro ao sincronizar mensagens no Supabase:', error.message || error);
+      return null;
+    }
     return data;
   } catch (err) {
-    console.warn('Supabase messages sync exception:', err);
+    console.error('Exceção ao sincronizar mensagens no Supabase:', err);
     return null;
   }
 };
@@ -516,70 +505,220 @@ export const syncMessagesToCloud = async (groupId, messages) => {
 export const fetchCloudMessages = async (groupId) => {
   if (!supabase || !groupId) return [];
   try {
+    const key = `messages_${groupId}`;
     const { data, error } = await supabase
       .from('user_data')
-      .select('payload')
-      .eq('user_id', 'global_messages')
-      .eq('data_key', `messages_${groupId}`)
+      .select('data')
+      .eq('key', key)
       .maybeSingle();
-    if (error || !data) return [];
-    return JSON.parse(data.payload);
+
+    if (error) {
+      console.error('Erro ao buscar mensagens no Supabase:', error.message || error);
+      return [];
+    }
+    if (!data || data.data === undefined) return [];
+    return parseJsonData(data.data, []);
   } catch (err) {
-    console.warn('Supabase fetch messages exception:', err);
+    console.error('Exceção ao buscar mensagens no Supabase:', err);
     return [];
   }
 };
 
-// ---- CLOUD VALIDATION: CHECK UNIQUE NAME / USERNAME ----
+// ============================================================================
+// 8. JUSTIFIED ABSENCES (FALTAS JUSTIFICADAS)
+// ============================================================================
+export const syncAbsencesToCloud = async (userId, absences) => {
+  if (!supabase || !userId) return null;
+  try {
+    const key = `absences_${userId}`;
+    const { data, error } = await supabase
+      .from('user_data')
+      .upsert({
+        key,
+        data: absences || [],
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'key' })
+      .select();
+
+    if (error) {
+      console.error('Erro ao sincronizar faltas justificadas no Supabase:', error.message || error);
+      return null;
+    }
+    return data;
+  } catch (err) {
+    console.error('Exceção ao sincronizar faltas justificadas no Supabase:', err);
+    return null;
+  }
+};
+
+export const fetchCloudAbsences = async (userId) => {
+  if (!supabase || !userId) return [];
+  try {
+    const key = `absences_${userId}`;
+    const { data, error } = await supabase
+      .from('user_data')
+      .select('data')
+      .eq('key', key)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Erro ao buscar faltas justificadas no Supabase:', error.message || error);
+      return [];
+    }
+    if (!data || data.data === undefined) return [];
+    return parseJsonData(data.data, []);
+  } catch (err) {
+    console.error('Exceção ao buscar faltas justificadas no Supabase:', err);
+    return [];
+  }
+};
+
+// ============================================================================
+// 9. FULL ACCOUNT & AUTHENTICATION REGISTRY (CROSS-DEVICE LOGIN)
+// ============================================================================
+export const syncFullAccountToCloud = async (user) => {
+  if (!supabase || !user?.id) return null;
+  try {
+    const cleanUser = {
+      id: user.id,
+      name: user.name,
+      username: user.username,
+      email: (user.email || '').toLowerCase().trim(),
+      password: user.password,
+      pin: user.pin,
+      gender: user.gender,
+      avatar: user.avatar,
+      weeklyGoal: user.weeklyGoal,
+      weeklySchedule: user.weeklySchedule,
+      privacy: user.privacy,
+      measurementsHistory: user.measurementsHistory || [],
+      onboarded: user.onboarded !== undefined ? user.onboarded : true,
+      updatedAt: new Date().toISOString()
+    };
+
+    // 1. Sync by user ID
+    const keyId = `account_${user.id}`;
+    await supabase
+      .from('user_data')
+      .upsert({
+        key: keyId,
+        data: cleanUser,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'key' });
+
+    // 2. Sync by Email for cross-device lookup
+    if (cleanUser.email) {
+      const keyEmail = `account_email_${cleanUser.email}`;
+      await supabase
+        .from('user_data')
+        .upsert({
+          key: keyEmail,
+          data: cleanUser,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'key' });
+    }
+
+    return cleanUser;
+  } catch (err) {
+    console.error('Exceção ao sincronizar conta completa no Supabase:', err);
+    return null;
+  }
+};
+
+export const fetchCloudAccount = async (userId) => {
+  if (!supabase || !userId) return null;
+  try {
+    const key = `account_${userId}`;
+    const { data, error } = await supabase
+      .from('user_data')
+      .select('data')
+      .eq('key', key)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    return parseJsonData(data.data, null);
+  } catch (err) {
+    console.error('Exceção ao buscar conta por ID no Supabase:', err);
+    return null;
+  }
+};
+
+export const fetchCloudAccountByEmail = async (email) => {
+  if (!supabase || !email) return null;
+  const emailNorm = email.trim().toLowerCase();
+  try {
+    const keyEmail = `account_email_${emailNorm}`;
+    const { data, error } = await supabase
+      .from('user_data')
+      .select('data')
+      .eq('key', keyEmail)
+      .maybeSingle();
+
+    if (!error && data?.data) {
+      return parseJsonData(data.data, null);
+    }
+
+    // Fallback: search all account keys
+    const { data: allAccounts, error: searchError } = await supabase
+      .from('user_data')
+      .select('data')
+      .like('key', 'account_%');
+
+    if (!searchError && Array.isArray(allAccounts)) {
+      for (const item of allAccounts) {
+        const parsed = parseJsonData(item.data);
+        if (parsed?.email?.toLowerCase() === emailNorm) {
+          return parsed;
+        }
+      }
+    }
+
+    return null;
+  } catch (err) {
+    console.error('Exceção ao buscar conta por e-mail no Supabase:', err);
+    return null;
+  }
+};
+
+export const syncProfileToCloud = async (userProfile) => {
+  return await syncFullAccountToCloud(userProfile);
+};
+
+export const fetchCloudProfile = async (userId) => {
+  return await fetchCloudAccount(userId);
+};
+
+// ============================================================================
+// 10. VALIDATION: USERNAME OR NAME UNIQUENESS
+// ============================================================================
 export const isUsernameOrNameTaken = async (name, username, excludeUserId = null) => {
   if (!supabase) return { isTaken: false };
   try {
     const cleanName = (name || '').trim().toLowerCase();
     const cleanUser = (username || '').trim().toLowerCase();
 
-    // 1. Check in public.profiles
-    const { data: profiles, error } = await supabase
-      .from('profiles')
-      .select('id, name, username');
+    const { data: accountsData, error } = await supabase
+      .from('user_data')
+      .select('data')
+      .like('key', 'account_email_%');
 
-    if (!error && Array.isArray(profiles)) {
-      for (const p of profiles) {
-        if (excludeUserId && String(p.id) === String(excludeUserId)) continue;
-        if (p.name && p.name.trim().toLowerCase() === cleanName) {
+    if (!error && Array.isArray(accountsData)) {
+      for (const item of accountsData) {
+        const acc = parseJsonData(item.data);
+        if (!acc) continue;
+        if (excludeUserId && String(acc.id) === String(excludeUserId)) continue;
+        if (acc.name && acc.name.trim().toLowerCase() === cleanName) {
           return { isTaken: true, field: 'name', message: 'Este nome de perfil já está em uso por outro atleta. Escolha outro.' };
         }
-        if (p.username && p.username.trim().toLowerCase() === cleanUser) {
-          return { isTaken: true, field: 'username', message: 'Este nome de usuário (@' + p.username + ') já está em uso. Escolha outro.' };
-        }
-      }
-    }
-
-    // 2. Cross check in user_data account_data
-    const { data: accountsData } = await supabase
-      .from('user_data')
-      .select('payload')
-      .eq('data_key', 'account_data');
-
-    if (Array.isArray(accountsData)) {
-      for (const item of accountsData) {
-        if (item.payload) {
-          const acc = typeof item.payload === 'string' ? JSON.parse(item.payload) : item.payload;
-          if (excludeUserId && String(acc.id) === String(excludeUserId)) continue;
-          if (acc.name && acc.name.trim().toLowerCase() === cleanName) {
-            return { isTaken: true, field: 'name', message: 'Este nome de perfil já está em uso por outro atleta. Escolha outro.' };
-          }
-          if (acc.username && acc.username.trim().toLowerCase() === cleanUser) {
-            return { isTaken: true, field: 'username', message: 'Este nome de usuário (@' + acc.username + ') já está em uso. Escolha outro.' };
-          }
+        if (acc.username && acc.username.trim().toLowerCase() === cleanUser) {
+          return { isTaken: true, field: 'username', message: 'Este nome de usuário (@' + acc.username + ') já está em uso. Escolha outro.' };
         }
       }
     }
 
     return { isTaken: false };
   } catch (err) {
-    console.warn('Check duplicate name exception:', err);
+    console.error('Exceção ao verificar nome/usuário duplicado:', err);
     return { isTaken: false };
   }
 };
-
-

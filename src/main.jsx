@@ -10,6 +10,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { DataProvider } from './contexts/DataContext';
+import { ToastProvider } from './contexts/ToastContext';
 import ErrorBoundary from './components/ui/ErrorBoundary';
 import App from './App';
 import './index.css';
@@ -26,15 +27,17 @@ try {
   ReactDOM.createRoot(rootElement).render(
     <React.StrictMode>
       <ErrorBoundary>
-        <BrowserRouter>
-          <ThemeProvider>
-            <AuthProvider>
-              <DataProvider>
-                <App />
-              </DataProvider>
-            </AuthProvider>
-          </ThemeProvider>
-        </BrowserRouter>
+        <ToastProvider>
+          <BrowserRouter>
+            <ThemeProvider>
+              <AuthProvider>
+                <DataProvider>
+                  <App />
+                </DataProvider>
+              </AuthProvider>
+            </ThemeProvider>
+          </BrowserRouter>
+        </ToastProvider>
       </ErrorBoundary>
     </React.StrictMode>
   );

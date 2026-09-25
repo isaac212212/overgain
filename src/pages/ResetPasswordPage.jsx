@@ -3,8 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Lock, Eye, EyeOff, CheckCircle2, AlertCircle, ArrowLeft, KeyRound } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
-import { supabase } from '../lib/supabase';
-import { storage } from '../utils/storage';
+import { supabase, syncFullAccountToCloud, fetchCloudAccountByEmail } from '../lib/supabase';
 import './ResetPasswordPage.css';
 
 export default function ResetPasswordPage() {
@@ -94,26 +93,16 @@ export default function ResetPasswordPage() {
         }
       }
 
-      // Also update local registered account if matching email or active user
-      const accounts = storage.get('accounts', {});
-      const activeId = storage.get('current_user_id', null);
-      let localUpdated = false;
-      const updatedAccounts = { ...accounts };
-
-      for (const id in updatedAccounts) {
-        const acc = updatedAccounts[id];
-        if ((userEmail && acc.email?.toLowerCase() === userEmail.toLowerCase()) || (activeId && id === activeId)) {
-          updatedAccounts[id] = {
-            ...acc,
+      // Also update account in Supabase cloud
+      if (userEmail) {
+        const cloudAcc = await fetchCloudAccountByEmail(userEmail);
+        if (cloudAcc) {
+          await syncFullAccountToCloud({
+            ...cloudAcc,
             password: newPassword,
             updatedAt: new Date().toISOString()
-          };
-          localUpdated = true;
+          });
         }
-      }
-
-      if (localUpdated) {
-        storage.set('accounts', updatedAccounts);
       }
 
       setSuccess(true);

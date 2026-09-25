@@ -21,8 +21,14 @@ import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
 import Modal from '../components/ui/Modal';
 import Avatar from '../components/ui/Avatar';
-import { INITIAL_USER, INITIAL_ROUTINES, INITIAL_CHECKINS, INITIAL_GROUPS, INITIAL_MESSAGES } from '../utils/initialData';
-import { storage } from '../utils/storage';
+import { DEFAULT_WEEKLY_SCHEDULE } from '../utils/initialData';
+import { 
+  syncRoutinesToCloud, 
+  syncCardioRoutinesToCloud, 
+  syncCheckinsToCloud, 
+  syncScheduleToCloud, 
+  syncMeasurementsToCloud 
+} from '../lib/supabase';
 import './SettingsPage.css';
 
 const WEEKLY_GOALS = [1, 2, 3, 4, 5, 6, 7];
@@ -121,7 +127,7 @@ export default function SettingsPage() {
   };
 
   // Confirm reset with password
-  const handleConfirmReset = () => {
+  const handleConfirmReset = async () => {
     if (!resetPasswordInput.trim()) {
       setResetError('Digite sua senha para confirmar o reset.');
       return;
@@ -129,24 +135,21 @@ export default function SettingsPage() {
 
     // Verify password matches the user's stored password (or PIN for legacy)
     const storedPassword = user?.password || user?.pin;
-    if (resetPasswordInput !== storedPassword) {
+    if (storedPassword && resetPasswordInput !== storedPassword) {
       setResetError('Senha incorreta! O reset foi cancelado. Verifique sua senha e tente novamente.');
       return;
     }
 
-    // Password correct - proceed with data reset
+    // Password correct - proceed with cloud data reset
     if (user?.id) {
-      storage.remove(`routines_${user.id}`);
-      storage.remove(`cardioRoutines_${user.id}`);
-      storage.remove(`checkins_${user.id}`);
-      storage.remove(`schedule_${user.id}`);
-      storage.remove(`activeWorkout_${user.id}`);
+      await Promise.all([
+        syncRoutinesToCloud(user.id, []),
+        syncCardioRoutinesToCloud(user.id, []),
+        syncCheckinsToCloud(user.id, []),
+        syncScheduleToCloud(user.id, DEFAULT_WEEKLY_SCHEDULE),
+        syncMeasurementsToCloud(user.id, [])
+      ]);
     }
-    storage.set('user', INITIAL_USER);
-    storage.set('routines', INITIAL_ROUTINES);
-    storage.set('checkins', INITIAL_CHECKINS);
-    storage.set('groups', INITIAL_GROUPS);
-    storage.set('messages', INITIAL_MESSAGES);
     setIsResetModalOpen(false);
     window.location.reload();
   };
