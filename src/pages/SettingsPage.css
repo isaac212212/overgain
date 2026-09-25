@@ -237,4 +237,114 @@
     align-items: flex-start;
     gap: 12px;
   }
+  .settings-page {
+    padding: 0 4px;
+  }
 }
+
+/* Reset Data Confirmation Modal */
+.reset-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.reset-warning-banner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 24px 16px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1.5px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius-lg);
+}
+
+.reset-warning-icon {
+  color: #ef4444;
+  filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.5));
+}
+
+.reset-warning-title {
+  font-size: 1.125rem;
+  font-weight: 900;
+  color: #ef4444;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.reset-warning-text {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.reset-warning-text strong {
+  color: #ef4444;
+}
+
+.reset-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.reset-password-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 16px 0;
+}
+
+.reset-lock-icon-wrap {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-full);
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reset-password-title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.reset-password-text {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.reset-password-text strong {
+  color: var(--text-primary);
+}
+
+.reset-password-section .input-group {
+  width: 100%;
+  text-align: left;
+}
+
+.reset-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius-md);
+  color: #ef4444;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: left;
+  width: 100%;
+  box-sizing: border-box;
+}
+

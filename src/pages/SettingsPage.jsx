@@ -13,11 +13,13 @@ import {
   Save, 
   Check, 
   ShieldCheck,
-  Smartphone
+  Smartphone,
+  AlertTriangle
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
+import Modal from '../components/ui/Modal';
 import Avatar from '../components/ui/Avatar';
 import { INITIAL_USER, INITIAL_ROUTINES, INITIAL_CHECKINS, INITIAL_GROUPS, INITIAL_MESSAGES } from '../utils/initialData';
 import { storage } from '../utils/storage';
@@ -39,6 +41,12 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // Reset Data Modal State
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [resetPasswordInput, setResetPasswordInput] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetStep, setResetStep] = useState(1); // 1 = confirmation, 2 = password entry
 
   const fileInputRef = useRef(null);
 
@@ -87,23 +95,43 @@ export default function SettingsPage() {
     setTimeout(() => setSavedSuccess(false), 2500);
   };
 
-  // Reset user data to clean zero state
-  const handleResetData = () => {
-    if (confirm('Deseja zerar todos os seus dados (rotinas, cardios e históricos)? Essa ação começará com tudo limpo.')) {
-      if (user?.id) {
-        storage.remove(`routines_${user.id}`);
-        storage.remove(`cardioRoutines_${user.id}`);
-        storage.remove(`checkins_${user.id}`);
-        storage.remove(`schedule_${user.id}`);
-        storage.remove(`activeWorkout_${user.id}`);
-      }
-      storage.set('user', INITIAL_USER);
-      storage.set('routines', INITIAL_ROUTINES);
-      storage.set('checkins', INITIAL_CHECKINS);
-      storage.set('groups', INITIAL_GROUPS);
-      storage.set('messages', INITIAL_MESSAGES);
-      window.location.reload();
+  // Open reset data modal
+  const handleOpenResetModal = () => {
+    setResetStep(1);
+    setResetPasswordInput('');
+    setResetError('');
+    setIsResetModalOpen(true);
+  };
+
+  // Confirm reset with password
+  const handleConfirmReset = () => {
+    if (!resetPasswordInput.trim()) {
+      setResetError('Digite sua senha para confirmar o reset.');
+      return;
     }
+
+    // Verify password matches the user's stored password (or PIN for legacy)
+    const storedPassword = user?.password || user?.pin;
+    if (resetPasswordInput !== storedPassword) {
+      setResetError('Senha incorreta! O reset foi cancelado. Verifique sua senha e tente novamente.');
+      return;
+    }
+
+    // Password correct - proceed with data reset
+    if (user?.id) {
+      storage.remove(`routines_${user.id}`);
+      storage.remove(`cardioRoutines_${user.id}`);
+      storage.remove(`checkins_${user.id}`);
+      storage.remove(`schedule_${user.id}`);
+      storage.remove(`activeWorkout_${user.id}`);
+    }
+    storage.set('user', INITIAL_USER);
+    storage.set('routines', INITIAL_ROUTINES);
+    storage.set('checkins', INITIAL_CHECKINS);
+    storage.set('groups', INITIAL_GROUPS);
+    storage.set('messages', INITIAL_MESSAGES);
+    setIsResetModalOpen(false);
+    window.location.reload();
   };
 
   // Logout
@@ -280,7 +308,7 @@ export default function SettingsPage() {
               <strong>Zerar Dados do Usuário</strong>
               <p className="text-muted text-sm">Limpa todas as rotinas, cardios e históricos para começar do zero.</p>
             </div>
-            <Button variant="secondary" icon={RotateCcw} onClick={handleResetData}>
+            <Button variant="secondary" icon={RotateCcw} onClick={handleOpenResetModal}>
               Zerar Dados
             </Button>
           </div>
@@ -296,6 +324,101 @@ export default function SettingsPage() {
           </div>
         </div>
       </Card>
+
+      {/* MODAL: CONFIRMAR RESET DE DADOS COM SENHA */}
+      {isResetModalOpen && (
+        <Modal
+          isOpen={isResetModalOpen}
+          onClose={() => setIsResetModalOpen(false)}
+          title="Resetar Dados da Conta"
+          size="sm"
+        >
+          <div className="reset-modal-body">
+            {resetStep === 1 && (
+              <>
+                <div className="reset-warning-banner">
+                  <AlertTriangle size={32} className="reset-warning-icon" />
+                  <h3 className="reset-warning-title">TEM CERTEZA QUE QUER RESETAR DADOS?</h3>
+                  <p className="reset-warning-text">
+                    Esta ação irá <strong>apagar permanentemente</strong> todo o seu histórico de treinos, 
+                    rotinas salvas, cardios, frequência e progresso. 
+                    Essa ação <strong>NÃO pode ser desfeita!</strong>
+                  </p>
+                </div>
+
+                <div className="reset-modal-actions">
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    onClick={() => setIsResetModalOpen(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button 
+                    type="button" 
+                    variant="danger" 
+                    onClick={() => setResetStep(2)}
+                    style={{ fontWeight: 800, fontSize: '0.9375rem' }}
+                  >
+                    Sim, Quero Resetar
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {resetStep === 2 && (
+              <>
+                <div className="reset-password-section">
+                  <div className="reset-lock-icon-wrap">
+                    <ShieldCheck size={28} />
+                  </div>
+                  <h3 className="reset-password-title">Confirmação de Segurança</h3>
+                  <p className="reset-password-text">
+                    Para proteger sua conta, digite sua <strong>senha atual</strong> para autorizar o reset dos dados.
+                  </p>
+
+                  <Input
+                    label="Senha Atual"
+                    type="password"
+                    value={resetPasswordInput}
+                    onChange={e => { setResetPasswordInput(e.target.value); setResetError(''); }}
+                    placeholder="Digite sua senha da conta"
+                    autoFocus
+                    required
+                  />
+
+                  {resetError && (
+                    <div className="reset-error-banner">
+                      <AlertTriangle size={14} />
+                      <span>{resetError}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="reset-modal-actions">
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    onClick={() => { setResetStep(1); setResetError(''); setResetPasswordInput(''); }}
+                  >
+                    Voltar
+                  </Button>
+                  <Button 
+                    type="button" 
+                    variant="danger" 
+                    onClick={handleConfirmReset}
+                    disabled={!resetPasswordInput.trim()}
+                    icon={RotateCcw}
+                    style={{ fontWeight: 800 }}
+                  >
+                    Confirmar Reset
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

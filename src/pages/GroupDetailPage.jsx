@@ -1403,7 +1403,7 @@ export default function GroupDetailPage() {
             <div className="member-calendar-box">
               <div className="member-cal-header-row">
                 <h4>Calendário de Treinos do Mês</h4>
-                <span className="member-cal-current-label">Setembro 2026</span>
+                <span className="member-cal-current-label">{getMonthName(new Date().getMonth())} {new Date().getFullYear()}</span>
               </div>
 
               <div className="member-cal-weekdays">
@@ -1422,46 +1422,84 @@ export default function GroupDetailPage() {
                     return <div key={`blank-${idx}`} className="member-cal-cell member-cal-blank" />;
                   }
 
-                  const todayNum = new Date().getDate();
+                  const todayDate = new Date();
+                  const todayNum = todayDate.getDate();
+                  const currentMonth = todayDate.getMonth();
+                  const currentYear = todayDate.getFullYear();
                   const targetDate = new Date(dObj.year, dObj.month, dObj.day);
                   const dayOfWeek = targetDate.getDay(); // 0 is Sun, 1 is Mon...
 
-                  // Simulate realistic member schedule (workout on weekdays + sat, sun rest)
-                  const isScheduledRest = dayOfWeek === 0; // Domingo descanso
-                  const isScheduledWorkout = !isScheduledRest;
+                  // Determine if the member is the current user
+                  const isSelf = selectedMember.id === user?.id;
 
-                  // Realistic done days based on member streak and volume
-                  const isDone = dObj.isCurrentMonth && (
-                    dObj.day <= todayNum && 
-                    (dObj.day % 2 === 0 || dObj.day === 1 || dObj.day === 7 || dObj.day === 15 || dObj.day === 21) &&
-                    !isScheduledRest
-                  );
+                  // Get the member's weekly schedule for this day
+                  // For the current user, use the real weeklySchedule from context
+                  // For other members, we don't have their real schedule, so leave unknown/neutral
+                  let isScheduledRest = false;
+                  let isScheduledWorkout = false;
+                  let hasScheduleData = false;
 
-                  const isPast = dObj.isCurrentMonth && dObj.day < todayNum;
-                  const isTodayOrFuture = dObj.isCurrentMonth && dObj.day >= todayNum;
+                  if (isSelf) {
+                    // Use real schedule data from user profile
+                    const memberSchedule = user?.weeklySchedule;
+                    if (memberSchedule) {
+                      const dayId = dayOfWeek; // 0=Sun, 1=Mon, ...
+                      const entry = memberSchedule[dayId];
+                      if (entry) {
+                        hasScheduleData = true;
+                        isScheduledRest = entry.type === 'rest' || (!entry.hasWorkout && !entry.hasCardio && entry.type !== 'workout' && entry.type !== 'cardio' && entry.type !== 'both');
+                        isScheduledWorkout = !isScheduledRest;
+                      }
+                    }
+                  }
+                  // For other members, we don't have schedule data - leave neutral
+
+                  // Check if a workout was actually done on this day
+                  let isDone = false;
+                  if (isSelf) {
+                    // Check real checkins for the current user
+                    isDone = (checkins || []).some(c => {
+                      const cDate = new Date(c.date);
+                      return isSameDay(cDate, targetDate);
+                    });
+                  } else {
+                    // For other members, check group feed posts on that day
+                    const memberFeedPosts = (group?.feed || []).filter(p => 
+                      p.userName === selectedMember.name && p.type !== 'justified_absence'
+                    );
+                    isDone = memberFeedPosts.some(p => {
+                      const pDate = new Date(p.date);
+                      return isSameDay(pDate, targetDate);
+                    });
+                  }
+
+                  const isViewingCurrentMonth = dObj.month === currentMonth && dObj.year === currentYear;
+                  const isPast = isViewingCurrentMonth && dObj.day < todayNum;
+                  const isTodayOrFuture = isViewingCurrentMonth && dObj.day >= todayNum;
 
                   let cellClass = '';
                   let cellIcon = null;
 
                   if (isDone) {
-                    // 🟢 Verde: Concluído
+                    // 🟢 Verde: Workout completed (confirmed by real data)
                     cellClass = 'member-cal-done-green';
-                  } else if (isScheduledRest) {
-                    // 💤 Roxo suave: Descanso
+                  } else if (hasScheduleData && isScheduledRest) {
+                    // 💤 Descanso: rest day per schedule
                     cellClass = 'member-cal-rest';
                     cellIcon = <span className="member-cal-rest-icon">zZ</span>;
-                  } else if (isPast && isScheduledWorkout) {
-                    // 🔴 Vermelho: Falta
+                  } else if (isPast && hasScheduleData && isScheduledWorkout) {
+                    // 🔴 Falta: past day with scheduled workout that wasn't done
                     cellClass = 'member-cal-missed';
-                  } else if (isTodayOrFuture && isScheduledWorkout) {
-                    // 🔵 Azul: Pendente
+                  } else if (isTodayOrFuture && hasScheduleData && isScheduledWorkout) {
+                    // 🔵 Pendente: future scheduled workout day
                     cellClass = 'member-cal-pending-blue';
                   }
+                  // If no schedule data (other members or no schedule set), cell stays neutral/clean
 
                   return (
                     <div 
                       key={idx} 
-                      className={`member-cal-cell ${cellClass} ${dObj.isCurrentMonth && dObj.day === todayNum ? 'is-today' : ''}`}
+                      className={`member-cal-cell ${cellClass} ${isViewingCurrentMonth && dObj.day === todayNum ? 'is-today' : ''}`}
                     >
                       <span className="cal-day-num">{dObj.day}</span>
                       {cellIcon}
