@@ -27,6 +27,8 @@ export default function OnboardingPage() {
   const [weeklyGoal, setWeeklyGoal] = useState(pendingUser?.weeklyGoal || 4);
   const [pin, setPin] = useState(() => sessionStorage.getItem('pending_pin') || '');
   const [pinConfirm, setPinConfirm] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleAvatarUpload = (e) => {
     const file = e.target.files[0];
@@ -37,14 +39,21 @@ export default function OnboardingPage() {
     }
   };
 
-  const handleComplete = () => {
-    completeOnboarding({
+  const handleComplete = async () => {
+    setErrorMsg('');
+    setLoading(true);
+    const res = await completeOnboarding({
       name: username.trim() || 'Atleta Heavy Duty',
       avatar,
       gender,
       weeklyGoal,
       pin: pin || null
     });
+    setLoading(false);
+    if (res && !res.success) {
+      setErrorMsg(res.error || 'Erro ao finalizar perfil.');
+      return;
+    }
     sessionStorage.removeItem('pending_pin');
     navigate('/dashboard');
   };
@@ -213,6 +222,12 @@ export default function OnboardingPage() {
           </div>
         )}
 
+        {errorMsg && (
+          <div style={{ color: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.12)', border: '1px solid #ef4444', padding: '10px 14px', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, marginTop: 16 }}>
+            ⚠️ {errorMsg}
+          </div>
+        )}
+
         {/* Actions */}
         <div className="onboarding-actions">
           {step > 1 && (
@@ -231,7 +246,7 @@ export default function OnboardingPage() {
               Próximo
             </Button>
           ) : (
-            <Button variant="success" size="lg" onClick={handleComplete} icon={Check}>
+            <Button variant="success" size="lg" onClick={handleComplete} icon={Check} loading={loading}>
               Criar meu perfil e Começar!
             </Button>
           )}

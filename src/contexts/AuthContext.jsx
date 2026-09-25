@@ -9,7 +9,8 @@ import {
   syncMeasurementsToCloud, 
   fetchCloudMeasurements, 
   fetchCloudAccountByEmail, 
-  fetchCloudProfile 
+  fetchCloudProfile,
+  isUsernameOrNameTaken
 } from '../lib/supabase';
 
 const AuthContext = createContext();
@@ -323,6 +324,28 @@ export function AuthProvider({ children }) {
   const registerWithEmail = async (email, password, name, gender = 'Masculino', weeklyGoal = 4) => {
     const emailNorm = email.trim().toLowerCase();
     const cleanName = (name || emailNorm.split('@')[0]).trim();
+    const cleanUsername = cleanName.toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 20);
+
+    // 1. Check if Name or Username is already taken in Supabase
+    const takenCheck = await isUsernameOrNameTaken(cleanName, cleanUsername);
+    if (takenCheck.isTaken) {
+      return {
+        success: false,
+        error: takenCheck.message || 'Este nome de perfil já está em uso por outro atleta. Escolha outro.'
+      };
+    }
+
+    // 2. Also check in locally cached accounts
+    const localTaken = Object.values(accounts).find(
+      acc => (acc.name && acc.name.trim().toLowerCase() === cleanName.toLowerCase()) ||
+             (acc.username && acc.username.trim().toLowerCase() === cleanUsername.toLowerCase())
+    );
+    if (localTaken) {
+      return {
+        success: false,
+        error: 'Este nome de perfil já está em uso por outro atleta. Escolha outro.'
+      };
+    }
 
     try {
       if (isCloudEnabled() && supabase?.auth?.signUp) {
@@ -332,6 +355,7 @@ export function AuthProvider({ children }) {
           options: {
             data: {
               name: cleanName,
+              username: cleanUsername,
               gender: gender || 'Masculino',
               weekly_goal: Number(weeklyGoal) || 4
             }
@@ -376,7 +400,7 @@ export function AuthProvider({ children }) {
         const newUser = {
           id: userId,
           name: cleanName,
-          username: cleanName.toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 20),
+          username: cleanUsername,
           email: emailNorm,
           password: password,
           avatar: null,
@@ -429,7 +453,7 @@ export function AuthProvider({ children }) {
     const newUser = {
       id: 'usr_' + Date.now().toString(36),
       name: cleanName,
-      username: cleanName.toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 20),
+      username: cleanUsername,
       email: emailNorm,
       password: password,
       avatar: null,
@@ -463,12 +487,23 @@ export function AuthProvider({ children }) {
   };
 
   // Complete onboarding (Name, Photo, Gender, Password)
-  const completeOnboarding = (profileData) => {
+  const completeOnboarding = async (profileData) => {
     const base = pendingUser || user || {};
+    const targetName = (profileData.name || base.name || 'Atleta').trim();
+    const targetUsername = profileData.username || (profileData.name || 'atleta').toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 20);
+
+    const takenCheck = await isUsernameOrNameTaken(targetName, targetUsername, base.id);
+    if (takenCheck.isTaken) {
+      return {
+        success: false,
+        error: takenCheck.message || 'Este nome de perfil já está em uso por outro atleta. Escolha outro.'
+      };
+    }
+
     const finalUser = {
       ...base,
-      name: (profileData.name || base.name || 'Atleta').trim(),
-      username: profileData.username || (profileData.name || 'atleta').toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 20),
+      name: targetName,
+      username: targetUsername,
       avatar: profileData.avatar || base.avatar || null,
       gender: profileData.gender || base.gender || 'Masculino',
       weeklyGoal: Number(profileData.weeklyGoal || base.weeklyGoal) || 4,
@@ -490,13 +525,52 @@ export function AuthProvider({ children }) {
 
     syncFullAccountToCloud(finalUser);
 
-    return finalUser;
+    return { success: true, user: finalUser };
   };
 
   // Update profile
-  const updateProfile = (profileData) => {
-    if (!user) return;
-    const updated = { ...user, ...profileData, updatedAt: new Date().toISOString() };
+  const updateProfile = async (profileData) => {
+    if (!user) return { success: false, error: 'Usuário não autenticado.' };
+
+    const targetName = profileData.name !== undefined ? profileData.name.trim() : user.name;
+    const targetUsername = profileData.username !== undefined ? profileData.username.trim() : user.username;
+
+    // Check if name or username changed and is taken
+    const nameChanged = targetName && targetName.toLowerCase() !== (user.name || '').toLowerCase();
+    const userChanged = targetUsername && targetUsername.toLowerCase() !== (user.username || '').toLowerCase();
+
+    if (nameChanged || userChanged) {
+      const takenCheck = await isUsernameOrNameTaken(targetName, targetUsername, user.id);
+      if (takenCheck.isTaken) {
+        return {
+          success: false,
+          error: takenCheck.message || 'Este nome de perfil já está em uso por outro atleta. Escolha outro.'
+        };
+      }
+
+      // Check locally cached accounts
+      const localTaken = Object.values(accounts).find(
+        acc => String(acc.id) !== String(user.id) && (
+          (acc.name && acc.name.trim().toLowerCase() === targetName.toLowerCase()) ||
+          (acc.username && acc.username.trim().toLowerCase() === targetUsername.toLowerCase())
+        )
+      );
+      if (localTaken) {
+        return {
+          success: false,
+          error: 'Este nome de perfil já está em uso por outro atleta. Escolha outro.'
+        };
+      }
+    }
+
+    const updated = { 
+      ...user, 
+      ...profileData, 
+      name: targetName, 
+      username: targetUsername, 
+      updatedAt: new Date().toISOString() 
+    };
+
     setUser(updated);
     setAccounts(prev => {
       const copy = { ...prev, [updated.id]: updated };
@@ -505,6 +579,7 @@ export function AuthProvider({ children }) {
     });
 
     syncFullAccountToCloud(updated);
+    return { success: true, user: updated };
   };
 
   // Add measurement
@@ -603,7 +678,7 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Logout
+  // Logout - completely invalidate local user state and cached groups/messages
   const logout = async () => {
     try {
       if (isCloudEnabled() && supabase?.auth?.signOut) {
@@ -617,6 +692,11 @@ export function AuthProvider({ children }) {
     setPendingUser(null);
     storage.remove('current_user_id');
     storage.remove('pending_user');
+    storage.remove('groups_db');
+    storage.remove('messages_db');
+    storage.remove('absences_db');
+    storage.remove('groups');
+    storage.remove('messages');
   };
 
   // Get all registered accounts list

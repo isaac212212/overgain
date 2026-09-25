@@ -41,6 +41,8 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   // Reset Data Modal State
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
@@ -63,9 +65,10 @@ export default function SettingsPage() {
   };
 
   // Save Settings
-  const handleSaveSettings = (e) => {
+  const handleSaveSettings = async (e) => {
     e.preventDefault();
     setPasswordError('');
+    setSaveError('');
 
     if (newPassword || confirmPassword) {
       if (newPassword.length < 6) {
@@ -78,21 +81,35 @@ export default function SettingsPage() {
       }
     }
 
-    updateProfile({
-      name: name.trim(),
-      username: username.trim(),
-      avatar,
-      weeklyGoal: Number(weeklyGoal)
-    });
+    setIsSaving(true);
 
-    if (newPassword && newPassword === confirmPassword) {
-      updatePassword(newPassword);
-      setNewPassword('');
-      setConfirmPassword('');
+    try {
+      const res = await updateProfile({
+        name: name.trim(),
+        username: username.trim(),
+        avatar,
+        weeklyGoal: Number(weeklyGoal)
+      });
+
+      if (res && !res.success) {
+        setSaveError(res.error || 'Erro ao atualizar perfil.');
+        setIsSaving(false);
+        return;
+      }
+
+      if (newPassword && newPassword === confirmPassword) {
+        await updatePassword(newPassword);
+        setNewPassword('');
+        setConfirmPassword('');
+      }
+
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 2500);
+    } catch (err) {
+      setSaveError(err?.message || 'Falha ao salvar configurações.');
+    } finally {
+      setIsSaving(false);
     }
-
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 2500);
   };
 
   // Open reset data modal
@@ -287,12 +304,18 @@ export default function SettingsPage() {
 
         {/* Save button floating/fixed */}
         <div className="settings-actions-footer">
+          {saveError && (
+            <div className="reset-error-banner animate-fade-in" style={{ margin: 0, padding: '10px 16px', borderRadius: 8, fontSize: '0.875rem' }}>
+              <AlertTriangle size={16} />
+              <span>{saveError}</span>
+            </div>
+          )}
           {savedSuccess && (
             <span className="save-success-tag animate-scale-in">
               <Check size={16} /> Alterações salvas com sucesso!
             </span>
           )}
-          <Button type="submit" variant="primary" size="lg" icon={Save}>
+          <Button type="submit" variant="primary" size="lg" icon={Save} loading={isSaving}>
             Salvar Alterações
           </Button>
         </div>

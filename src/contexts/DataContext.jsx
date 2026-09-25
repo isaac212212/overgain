@@ -128,48 +128,12 @@ export function DataProvider({ children }) {
   // =========================================================================
   const syncWithCloud = useCallback(async () => {
     try {
-      // 1. Sync Groups
+      // 1. Sync Groups: The Supabase 'groups' table is the single authoritative source of truth.
+      // We do NOT resurrect local phantom groups that were deleted from Supabase.
       const cloudGroups = await fetchCloudGroups();
-      if (Array.isArray(cloudGroups) && cloudGroups.length > 0) {
-        setAllGroups(prev => {
-          const map = new Map();
-          // First add all cloud groups
-          cloudGroups.forEach(g => {
-            if (g && g.id) map.set(g.id, g);
-          });
-          // Then merge local groups that might have new updates
-          (prev || []).forEach(localG => {
-            if (!map.has(localG.id)) {
-              map.set(localG.id, localG);
-              // Push local group to cloud
-              syncGroupToCloud(localG);
-            } else {
-              const cg = map.get(localG.id);
-              // Merge members
-              const memberMap = new Map();
-              (cg.members || []).forEach(m => memberMap.set(m.id, m));
-              (localG.members || []).forEach(m => memberMap.set(m.id, m));
-              // Merge feed
-              const feedMap = new Map();
-              (cg.feed || []).forEach(f => feedMap.set(f.id, f));
-              (localG.feed || []).forEach(f => feedMap.set(f.id, f));
-              const mergedFeed = Array.from(feedMap.values()).sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
-
-              map.set(localG.id, {
-                ...cg,
-                ...localG,
-                members: Array.from(memberMap.values()),
-                feed: mergedFeed
-              });
-            }
-          });
-          const result = Array.from(map.values());
-          storage.set('groups_db', result);
-          return result;
-        });
-      } else if (allGroups.length > 0) {
-        // Push local groups to cloud if cloud was empty
-        allGroups.forEach(g => syncGroupToCloud(g));
+      if (Array.isArray(cloudGroups)) {
+        setAllGroups(cloudGroups);
+        storage.set('groups_db', cloudGroups);
       }
 
       // 2. Sync User Specific Data (Checkins, Routines, Cardios, Schedule)
@@ -181,7 +145,7 @@ export function DataProvider({ children }) {
           fetchCloudSchedule(user.id)
         ]);
 
-        // Checkins merge
+        // Checkins: sync with cloud
         if (Array.isArray(cloudCheckins) && cloudCheckins.length > 0) {
           setCheckins(prev => {
             const map = new Map();
@@ -200,7 +164,7 @@ export function DataProvider({ children }) {
           checkins.forEach(c => syncCheckinToCloud(c));
         }
 
-        // Routines merge
+        // Routines: sync with cloud
         if (Array.isArray(cloudRoutines) && cloudRoutines.length > 0) {
           setRoutines(prev => {
             if (!prev || prev.length === 0) {
@@ -213,7 +177,7 @@ export function DataProvider({ children }) {
           syncRoutinesToCloud(user.id, routines);
         }
 
-        // Cardio merge
+        // Cardio: sync with cloud
         if (Array.isArray(cloudCardios) && cloudCardios.length > 0) {
           setCardioRoutines(prev => {
             if (!prev || prev.length === 0) {
@@ -226,7 +190,7 @@ export function DataProvider({ children }) {
           syncCardioRoutinesToCloud(user.id, cardioRoutines);
         }
 
-        // Schedule merge
+        // Schedule: sync with cloud
         if (cloudSchedule && typeof cloudSchedule === 'object' && Object.keys(cloudSchedule).length > 0) {
           setWeeklySchedule(cloudSchedule);
           storage.set(`schedule_${user.id}`, cloudSchedule);

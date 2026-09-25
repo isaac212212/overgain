@@ -530,3 +530,56 @@ export const fetchCloudMessages = async (groupId) => {
   }
 };
 
+// ---- CLOUD VALIDATION: CHECK UNIQUE NAME / USERNAME ----
+export const isUsernameOrNameTaken = async (name, username, excludeUserId = null) => {
+  if (!supabase) return { isTaken: false };
+  try {
+    const cleanName = (name || '').trim().toLowerCase();
+    const cleanUser = (username || '').trim().toLowerCase();
+
+    // 1. Check in public.profiles
+    const { data: profiles, error } = await supabase
+      .from('profiles')
+      .select('id, name, username');
+
+    if (!error && Array.isArray(profiles)) {
+      for (const p of profiles) {
+        if (excludeUserId && String(p.id) === String(excludeUserId)) continue;
+        if (p.name && p.name.trim().toLowerCase() === cleanName) {
+          return { isTaken: true, field: 'name', message: 'Este nome de perfil já está em uso por outro atleta. Escolha outro.' };
+        }
+        if (p.username && p.username.trim().toLowerCase() === cleanUser) {
+          return { isTaken: true, field: 'username', message: 'Este nome de usuário (@' + p.username + ') já está em uso. Escolha outro.' };
+        }
+      }
+    }
+
+    // 2. Cross check in user_data account_data
+    const { data: accountsData } = await supabase
+      .from('user_data')
+      .select('payload')
+      .eq('data_key', 'account_data');
+
+    if (Array.isArray(accountsData)) {
+      for (const item of accountsData) {
+        if (item.payload) {
+          const acc = typeof item.payload === 'string' ? JSON.parse(item.payload) : item.payload;
+          if (excludeUserId && String(acc.id) === String(excludeUserId)) continue;
+          if (acc.name && acc.name.trim().toLowerCase() === cleanName) {
+            return { isTaken: true, field: 'name', message: 'Este nome de perfil já está em uso por outro atleta. Escolha outro.' };
+          }
+          if (acc.username && acc.username.trim().toLowerCase() === cleanUser) {
+            return { isTaken: true, field: 'username', message: 'Este nome de usuário (@' + acc.username + ') já está em uso. Escolha outro.' };
+          }
+        }
+      }
+    }
+
+    return { isTaken: false };
+  } catch (err) {
+    console.warn('Check duplicate name exception:', err);
+    return { isTaken: false };
+  }
+};
+
+
