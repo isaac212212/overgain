@@ -1,7 +1,16 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { storage } from '../utils/storage';
 import { DEFAULT_WEEKLY_SCHEDULE } from '../utils/initialData';
-import { supabase, isCloudEnabled } from '../lib/supabase';
+import { 
+  supabase, 
+  isCloudEnabled, 
+  syncFullAccountToCloud, 
+  syncProfileToCloud, 
+  syncMeasurementsToCloud, 
+  fetchCloudMeasurements, 
+  fetchCloudAccountByEmail, 
+  fetchCloudProfile 
+} from '../lib/supabase';
 
 const AuthContext = createContext();
 
@@ -49,7 +58,7 @@ export function AuthProvider({ children }) {
     }
   }, [pendingUser]);
 
-  // Session verification with 3s max timeout (prevents stuck black screens in APK)
+  // Session verification and cloud sync on startup
   useEffect(() => {
     let timeoutId = null;
     let isCancelled = false;
@@ -58,19 +67,28 @@ export function AuthProvider({ children }) {
       if (!isCancelled) {
         setIsLoading(false);
       }
-    }, 3000);
+    }, 2500);
 
-    const verifySession = async () => {
+    const verifySessionAndSync = async () => {
       try {
-        if (isCloudEnabled() && supabase?.auth?.getSession) {
-          const { data, error } = await supabase.auth.getSession();
-          if (!isCancelled && !error && data?.session?.user) {
-            const cloudUser = data.session.user;
-            const existing = Object.values(accounts).find(a => a.email === cloudUser.email);
-            if (existing) {
-              setCurrentUserId(existing.id);
-              setUser(existing);
-            }
+        if (currentUserId) {
+          // Fetch cloud measurements in background to merge
+          const cloudMeasurements = await fetchCloudMeasurements(currentUserId);
+          if (!isCancelled && Array.isArray(cloudMeasurements) && cloudMeasurements.length > 0) {
+            setUser(prev => {
+              if (!prev) return prev;
+              const localHistory = prev.measurementsHistory || [];
+              const map = new Map();
+              cloudMeasurements.forEach(m => map.set(m.id || m.date, m));
+              localHistory.forEach(m => {
+                const key = m.id || m.date;
+                if (!map.has(key)) map.set(key, m);
+              });
+              const merged = Array.from(map.values()).sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
+              const updated = { ...prev, measurementsHistory: merged };
+              setAccounts(accs => ({ ...accs, [prev.id]: updated }));
+              return updated;
+            });
           }
         }
       } catch (err) {
@@ -83,28 +101,41 @@ export function AuthProvider({ children }) {
       }
     };
 
-    verifySession();
+    verifySessionAndSync();
 
     return () => {
       isCancelled = true;
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, []);
+  }, [currentUserId]);
 
   // Login with existing or new Google Account
-  const loginWithGoogle = (googleEmail) => {
+  const loginWithGoogle = async (googleEmail) => {
     const emailNorm = (googleEmail || 'usuario@gmail.com').trim().toLowerCase();
     
-    // Check if this google account already exists in accounts registry
-    const existing = Object.values(accounts).find(
+    // Check local accounts first
+    let existing = Object.values(accounts).find(
       acc => acc.email?.toLowerCase() === emailNorm
     );
 
+    // If not local, check Supabase cloud for cross-device login
+    if (!existing) {
+      try {
+        const cloudAcc = await fetchCloudAccountByEmail(emailNorm);
+        if (cloudAcc && cloudAcc.id) {
+          existing = cloudAcc;
+          setAccounts(prev => ({ ...prev, [cloudAcc.id]: cloudAcc }));
+        }
+      } catch (e) {
+        console.warn('Cloud account fetch error:', e);
+      }
+    }
+
     if (existing && existing.onboarded) {
-      // Existing returning account -> Log in directly
       setCurrentUserId(existing.id);
       setUser(existing);
       setPendingUser(null);
+      syncFullAccountToCloud(existing);
       return { isNew: false, user: existing };
     }
 
@@ -135,12 +166,25 @@ export function AuthProvider({ children }) {
     return { isNew: true, pendingUser: newPending };
   };
 
-  // Login with Email & Password
-  const loginWithEmail = (email, password) => {
+  // Login with Email & Password (with cloud fallback for PC <-> Mobile sync)
+  const loginWithEmail = async (email, password) => {
     const emailNorm = email.trim().toLowerCase();
-    const existing = Object.values(accounts).find(
+    let existing = Object.values(accounts).find(
       acc => acc.email?.toLowerCase() === emailNorm
     );
+
+    // If account not found in local storage, check Supabase cloud (cross-device login)
+    if (!existing) {
+      try {
+        const cloudAcc = await fetchCloudAccountByEmail(emailNorm);
+        if (cloudAcc && cloudAcc.id) {
+          existing = cloudAcc;
+          setAccounts(prev => ({ ...prev, [cloudAcc.id]: cloudAcc }));
+        }
+      } catch (err) {
+        console.warn('Cross device cloud check error:', err);
+      }
+    }
 
     if (!existing) {
       return { 
@@ -161,13 +205,17 @@ export function AuthProvider({ children }) {
     setCurrentUserId(existing.id);
     setUser(existing);
     setPendingUser(null);
+
+    // Sync full profile and measurements with cloud in background
+    syncFullAccountToCloud(existing);
+
     return { success: true, user: existing };
   };
 
   // Register with Email, Password, Name, Gender, Weekly Goal
-  const registerWithEmail = (email, password, name, gender = 'Masculino', weeklyGoal = 4) => {
+  const registerWithEmail = async (email, password, name, gender = 'Masculino', weeklyGoal = 4) => {
     const emailNorm = email.trim().toLowerCase();
-    const existing = Object.values(accounts).find(
+    let existing = Object.values(accounts).find(
       acc => acc.email?.toLowerCase() === emailNorm
     );
 
@@ -201,7 +249,7 @@ export function AuthProvider({ children }) {
       createdAt: new Date().toISOString()
     };
 
-    // Save account in accounts map
+    // Save account locally
     setAccounts(prev => {
       const updated = { ...prev, [newUser.id]: newUser };
       storage.set('accounts', updated);
@@ -213,40 +261,22 @@ export function AuthProvider({ children }) {
     setPendingUser(null);
     storage.set('current_user_id', newUser.id);
 
+    // Immediately sync to Supabase Cloud
+    syncFullAccountToCloud(newUser);
+
     return { success: true, user: newUser };
   };
 
-  // Update Password
-  const updatePassword = (newPassword) => {
-    if (!user) return;
-    const updated = { ...user, password: newPassword, updatedAt: new Date().toISOString() };
-    setUser(updated);
-    setAccounts(prev => {
-      const copy = { ...prev, [updated.id]: updated };
-      storage.set('accounts', copy);
-      return copy;
-    });
-  };
-
-  // Complete Onboarding (fallback if needed)
+  // Complete onboarding (Name, Photo, Gender, Password)
   const completeOnboarding = (profileData) => {
-    const base = pendingUser || user || {
-      id: 'usr_' + Date.now().toString(36),
-      email: 'usuario@overgain.com',
-      password: 'password123',
-      weeklySchedule: DEFAULT_WEEKLY_SCHEDULE,
-      privacy: { publicMeasurements: false, publicRoutines: true, publicWeights: false, publicPRs: false, publicRoutineWeights: false },
-      measurementsHistory: [],
-      createdAt: new Date().toISOString()
-    };
-
+    const base = pendingUser || user || {};
     const finalUser = {
       ...base,
-      name: profileData.name || base.name || 'Atleta Overgain',
-      username: (profileData.name || base.name || 'atleta').toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 20),
-      avatar: profileData.avatar || null,
-      gender: profileData.gender || 'Prefiro não informar',
-      weeklyGoal: Number(profileData.weeklyGoal) || 4,
+      name: (profileData.name || base.name || 'Atleta').trim(),
+      username: profileData.username || (profileData.name || 'atleta').toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 20),
+      avatar: profileData.avatar || base.avatar || null,
+      gender: profileData.gender || base.gender || 'Masculino',
+      weeklyGoal: Number(profileData.weeklyGoal || base.weeklyGoal) || 4,
       password: profileData.password || base.password,
       onboarded: true,
       updatedAt: new Date().toISOString()
@@ -264,6 +294,9 @@ export function AuthProvider({ children }) {
     setPendingUser(null);
     storage.set('current_user_id', finalUser.id);
 
+    // Sync to Cloud
+    syncFullAccountToCloud(finalUser);
+
     return finalUser;
   };
 
@@ -277,6 +310,9 @@ export function AuthProvider({ children }) {
       storage.set('accounts', copy);
       return copy;
     });
+
+    // Cloud sync
+    syncFullAccountToCloud(updated);
   };
 
   // Add measurement
@@ -288,9 +324,10 @@ export function AuthProvider({ children }) {
       createdAt: new Date().toISOString(),
       ...measurement
     };
+    const updatedHistory = [newEntry, ...(user.measurementsHistory || [])];
     const updated = {
       ...user,
-      measurementsHistory: [newEntry, ...(user.measurementsHistory || [])]
+      measurementsHistory: updatedHistory
     };
     setUser(updated);
     setAccounts(prev => {
@@ -298,6 +335,10 @@ export function AuthProvider({ children }) {
       storage.set('accounts', copy);
       return copy;
     });
+
+    // Sync measurements to cloud
+    syncMeasurementsToCloud(user.id, updatedHistory);
+    syncFullAccountToCloud(updated);
   };
 
   // Update PIN
@@ -310,6 +351,20 @@ export function AuthProvider({ children }) {
       storage.set('accounts', copy);
       return copy;
     });
+    syncFullAccountToCloud(updated);
+  };
+
+  // Update password
+  const updatePassword = (newPassword) => {
+    if (!user) return;
+    const updated = { ...user, password: newPassword, updatedAt: new Date().toISOString() };
+    setUser(updated);
+    setAccounts(prev => {
+      const copy = { ...prev, [updated.id]: updated };
+      storage.set('accounts', copy);
+      return copy;
+    });
+    syncFullAccountToCloud(updated);
   };
 
   // Update Privacy
@@ -325,6 +380,7 @@ export function AuthProvider({ children }) {
       storage.set('accounts', copy);
       return copy;
     });
+    syncFullAccountToCloud(updated);
   };
 
   // Update weekly goal
@@ -337,6 +393,7 @@ export function AuthProvider({ children }) {
       storage.set('accounts', copy);
       return copy;
     });
+    syncFullAccountToCloud(updated);
   };
 
   // Switch account

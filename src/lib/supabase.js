@@ -325,6 +325,43 @@ export const fetchCloudSchedule = async (userId) => {
   }
 };
 
+// ---- CLOUD SYNC: MEASUREMENTS ----
+export const syncMeasurementsToCloud = async (userId, measurements) => {
+  if (!supabase || !userId || !measurements) return null;
+  try {
+    const { data, error } = await supabase
+      .from('user_data')
+      .upsert({
+        user_id: userId,
+        data_key: 'measurements',
+        payload: JSON.stringify(measurements),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id,data_key' });
+    if (error) console.warn('Supabase measurements sync error:', error.message);
+    return data;
+  } catch (err) {
+    console.warn('Supabase measurements sync exception:', err);
+    return null;
+  }
+};
+
+export const fetchCloudMeasurements = async (userId) => {
+  if (!supabase || !userId) return null;
+  try {
+    const { data, error } = await supabase
+      .from('user_data')
+      .select('payload')
+      .eq('user_id', userId)
+      .eq('data_key', 'measurements')
+      .maybeSingle();
+    if (error || !data) return null;
+    return JSON.parse(data.payload);
+  } catch (err) {
+    console.warn('Supabase fetch measurements exception:', err);
+    return null;
+  }
+};
+
 // ---- CLOUD SYNC: GROUPS ----
 export const syncGroupToCloud = async (groupData) => {
   if (!supabase || !groupData?.id) return null;
@@ -360,7 +397,7 @@ export const fetchCloudGroups = async () => {
       console.warn('Supabase fetch groups error:', error.message);
       return [];
     }
-    return data.map(item => item.payload ? JSON.parse(item.payload) : {
+    return data.map(item => item.payload ? (typeof item.payload === 'string' ? JSON.parse(item.payload) : item.payload) : {
       id: item.id,
       name: item.name,
       description: item.description,
@@ -377,3 +414,119 @@ export const fetchCloudGroups = async () => {
     return [];
   }
 };
+
+// ---- CLOUD SYNC: FULL ACCOUNT REGISTRY ----
+export const syncFullAccountToCloud = async (user) => {
+  if (!supabase || !user?.id) return null;
+  try {
+    // 1. Sync public profile
+    await syncProfileToCloud(user);
+
+    // 2. Sync full account payload to user_data for cross-device authentication
+    const { data, error } = await supabase
+      .from('user_data')
+      .upsert({
+        user_id: user.id,
+        data_key: 'account_data',
+        payload: JSON.stringify({
+          id: user.id,
+          name: user.name,
+          username: user.username,
+          email: user.email,
+          password: user.password,
+          pin: user.pin,
+          gender: user.gender,
+          avatar: user.avatar,
+          weeklyGoal: user.weeklyGoal,
+          weeklySchedule: user.weeklySchedule,
+          privacy: user.privacy,
+          measurementsHistory: user.measurementsHistory,
+          onboarded: user.onboarded,
+          updatedAt: new Date().toISOString()
+        }),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id,data_key' });
+    if (error) console.warn('Supabase account sync error:', error.message);
+    return data;
+  } catch (err) {
+    console.warn('Supabase account sync exception:', err);
+    return null;
+  }
+};
+
+export const fetchCloudAccountByEmail = async (email) => {
+  if (!supabase || !email) return null;
+  try {
+    const { data, error } = await supabase
+      .from('user_data')
+      .select('payload')
+      .eq('data_key', 'account_data');
+    if (error || !data) return null;
+    for (const item of data) {
+      if (item.payload) {
+        const parsed = JSON.parse(item.payload);
+        if (parsed.email?.toLowerCase() === email.trim().toLowerCase()) {
+          return parsed;
+        }
+      }
+    }
+    return null;
+  } catch (err) {
+    console.warn('Supabase fetch account by email exception:', err);
+    return null;
+  }
+};
+
+// ---- CLOUD SYNC: DELETE GROUP ----
+export const deleteCloudGroup = async (groupId) => {
+  if (!supabase || !groupId) return null;
+  try {
+    const { data, error } = await supabase
+      .from('groups')
+      .delete()
+      .eq('id', groupId);
+    if (error) console.warn('Supabase delete group error:', error.message);
+    return data;
+  } catch (err) {
+    console.warn('Supabase delete group exception:', err);
+    return null;
+  }
+};
+
+// ---- CLOUD SYNC: MESSAGES ----
+export const syncMessagesToCloud = async (groupId, messages) => {
+  if (!supabase || !groupId) return null;
+  try {
+    const { data, error } = await supabase
+      .from('user_data')
+      .upsert({
+        user_id: 'global_messages',
+        data_key: `messages_${groupId}`,
+        payload: JSON.stringify(messages),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id,data_key' });
+    if (error) console.warn('Supabase messages sync error:', error.message);
+    return data;
+  } catch (err) {
+    console.warn('Supabase messages sync exception:', err);
+    return null;
+  }
+};
+
+export const fetchCloudMessages = async (groupId) => {
+  if (!supabase || !groupId) return [];
+  try {
+    const { data, error } = await supabase
+      .from('user_data')
+      .select('payload')
+      .eq('user_id', 'global_messages')
+      .eq('data_key', `messages_${groupId}`)
+      .maybeSingle();
+    if (error || !data) return [];
+    return JSON.parse(data.payload);
+  } catch (err) {
+    console.warn('Supabase fetch messages exception:', err);
+    return [];
+  }
+};
+

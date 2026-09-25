@@ -2,6 +2,23 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { useAuth } from './AuthContext';
 import { storage, generateId } from '../utils/storage';
 import { DEFAULT_WEEKLY_SCHEDULE } from '../utils/initialData';
+import { 
+  fetchCloudGroups, 
+  syncGroupToCloud, 
+  deleteCloudGroup, 
+  fetchCloudCheckins, 
+  syncCheckinToCloud, 
+  fetchCloudRoutines, 
+  syncRoutinesToCloud, 
+  fetchCloudCardioRoutines, 
+  syncCardioRoutinesToCloud, 
+  fetchCloudSchedule, 
+  syncScheduleToCloud, 
+  fetchCloudMessages, 
+  syncMessagesToCloud,
+  isCloudEnabled,
+  supabase 
+} from '../lib/supabase';
 
 const DataContext = createContext();
 
@@ -27,8 +44,6 @@ export function DataProvider({ children }) {
     return cardios.filter(c => c.id !== 'cardio_natacao' && c.id !== 'cardio_esteira' && c.id !== 'cardio_bike');
   };
 
-  const DEFAULT_CARDIO_ROUTINES = [];
-
   const [cardioRoutines, setCardioRoutines] = useState(() => {
     const stored = user?.id ? storage.get(`cardioRoutines_${user.id}`, []) : [];
     return filterLegacyMockCardios(stored);
@@ -41,8 +56,9 @@ export function DataProvider({ children }) {
   // ---- GLOBAL SHARED GROUPS & MESSAGES DATABASE ----
   const [allGroups, setAllGroups] = useState(() => storage.get('groups_db', []));
   const [allMessages, setAllMessages] = useState(() => storage.get('messages_db', []));
+  const [justifiedAbsences, setJustifiedAbsences] = useState(() => storage.get('absences_db', []));
 
-  // Reload user-specific data whenever active user switches
+  // Reload user-specific data from local cache whenever active user switches
   useEffect(() => {
     if (user?.id) {
       setRoutines(storage.get(`routines_${user.id}`, []));
@@ -59,7 +75,7 @@ export function DataProvider({ children }) {
     }
   }, [user?.id]);
 
-  // Persist user-specific data on changes
+  // Persist user-specific data on local changes
   useEffect(() => {
     if (user?.id) {
       storage.set(`routines_${user.id}`, routines);
@@ -99,8 +115,6 @@ export function DataProvider({ children }) {
     storage.set('groups_db', allGroups);
   }, [allGroups]);
 
-  const [justifiedAbsences, setJustifiedAbsences] = useState(() => storage.get('absences_db', []));
-
   useEffect(() => {
     storage.set('messages_db', allMessages);
   }, [allMessages]);
@@ -108,6 +122,141 @@ export function DataProvider({ children }) {
   useEffect(() => {
     storage.set('absences_db', justifiedAbsences);
   }, [justifiedAbsences]);
+
+  // =========================================================================
+  // SUPABASE 2-WAY CLOUD SYNC ENGINE (CROSS-DEVICE: PC <-> MOBILE)
+  // =========================================================================
+  const syncWithCloud = useCallback(async () => {
+    try {
+      // 1. Sync Groups
+      const cloudGroups = await fetchCloudGroups();
+      if (Array.isArray(cloudGroups) && cloudGroups.length > 0) {
+        setAllGroups(prev => {
+          const map = new Map();
+          // First add all cloud groups
+          cloudGroups.forEach(g => {
+            if (g && g.id) map.set(g.id, g);
+          });
+          // Then merge local groups that might have new updates
+          (prev || []).forEach(localG => {
+            if (!map.has(localG.id)) {
+              map.set(localG.id, localG);
+              // Push local group to cloud
+              syncGroupToCloud(localG);
+            } else {
+              const cg = map.get(localG.id);
+              // Merge members
+              const memberMap = new Map();
+              (cg.members || []).forEach(m => memberMap.set(m.id, m));
+              (localG.members || []).forEach(m => memberMap.set(m.id, m));
+              // Merge feed
+              const feedMap = new Map();
+              (cg.feed || []).forEach(f => feedMap.set(f.id, f));
+              (localG.feed || []).forEach(f => feedMap.set(f.id, f));
+              const mergedFeed = Array.from(feedMap.values()).sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
+
+              map.set(localG.id, {
+                ...cg,
+                ...localG,
+                members: Array.from(memberMap.values()),
+                feed: mergedFeed
+              });
+            }
+          });
+          const result = Array.from(map.values());
+          storage.set('groups_db', result);
+          return result;
+        });
+      } else if (allGroups.length > 0) {
+        // Push local groups to cloud if cloud was empty
+        allGroups.forEach(g => syncGroupToCloud(g));
+      }
+
+      // 2. Sync User Specific Data (Checkins, Routines, Cardios, Schedule)
+      if (user?.id) {
+        const [cloudCheckins, cloudRoutines, cloudCardios, cloudSchedule] = await Promise.all([
+          fetchCloudCheckins(user.id),
+          fetchCloudRoutines(user.id),
+          fetchCloudCardioRoutines(user.id),
+          fetchCloudSchedule(user.id)
+        ]);
+
+        // Checkins merge
+        if (Array.isArray(cloudCheckins) && cloudCheckins.length > 0) {
+          setCheckins(prev => {
+            const map = new Map();
+            cloudCheckins.forEach(c => map.set(c.id, c));
+            (prev || []).forEach(c => {
+              if (!map.has(c.id)) {
+                map.set(c.id, c);
+                syncCheckinToCloud(c);
+              }
+            });
+            const merged = Array.from(map.values()).sort((a, b) => new Date(b.date) - new Date(a.date));
+            storage.set(`checkins_${user.id}`, merged);
+            return merged;
+          });
+        } else if (checkins.length > 0) {
+          checkins.forEach(c => syncCheckinToCloud(c));
+        }
+
+        // Routines merge
+        if (Array.isArray(cloudRoutines) && cloudRoutines.length > 0) {
+          setRoutines(prev => {
+            if (!prev || prev.length === 0) {
+              storage.set(`routines_${user.id}`, cloudRoutines);
+              return cloudRoutines;
+            }
+            return prev;
+          });
+        } else if (routines.length > 0) {
+          syncRoutinesToCloud(user.id, routines);
+        }
+
+        // Cardio merge
+        if (Array.isArray(cloudCardios) && cloudCardios.length > 0) {
+          setCardioRoutines(prev => {
+            if (!prev || prev.length === 0) {
+              storage.set(`cardioRoutines_${user.id}`, cloudCardios);
+              return cloudCardios;
+            }
+            return prev;
+          });
+        } else if (cardioRoutines.length > 0) {
+          syncCardioRoutinesToCloud(user.id, cardioRoutines);
+        }
+
+        // Schedule merge
+        if (cloudSchedule && typeof cloudSchedule === 'object' && Object.keys(cloudSchedule).length > 0) {
+          setWeeklySchedule(cloudSchedule);
+          storage.set(`schedule_${user.id}`, cloudSchedule);
+        } else if (weeklySchedule) {
+          syncScheduleToCloud(user.id, weeklySchedule);
+        }
+      }
+    } catch (err) {
+      console.warn('Cloud sync background error:', err);
+    }
+  }, [user?.id]);
+
+  // Initial cloud sync on mount & when user logs in
+  useEffect(() => {
+    syncWithCloud();
+
+    // Periodic sync every 20 seconds to keep devices aligned
+    const interval = setInterval(() => {
+      syncWithCloud();
+    }, 20000);
+
+    // Sync on window focus / tab switch
+    const onFocus = () => syncWithCloud();
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [syncWithCloud]);
 
   // ---- ROUTINES ACTIONS ----
   const addRoutine = useCallback((routine) => {
@@ -117,17 +266,29 @@ export function DataProvider({ children }) {
       ...routine,
       exercises: routine.exercises || []
     };
-    setRoutines(prev => [...prev, newRoutine]);
+    setRoutines(prev => {
+      const updated = [...prev, newRoutine];
+      if (user?.id) syncRoutinesToCloud(user.id, updated);
+      return updated;
+    });
     return newRoutine;
-  }, []);
+  }, [user?.id]);
 
   const updateRoutine = useCallback((id, updates) => {
-    setRoutines(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
-  }, []);
+    setRoutines(prev => {
+      const updated = prev.map(r => r.id === id ? { ...r, ...updates } : r);
+      if (user?.id) syncRoutinesToCloud(user.id, updated);
+      return updated;
+    });
+  }, [user?.id]);
 
   const deleteRoutine = useCallback((id) => {
-    setRoutines(prev => prev.filter(r => r.id !== id));
-  }, []);
+    setRoutines(prev => {
+      const updated = prev.filter(r => r.id !== id);
+      if (user?.id) syncRoutinesToCloud(user.id, updated);
+      return updated;
+    });
+  }, [user?.id]);
 
   const duplicateRoutine = useCallback((id) => {
     setRoutines(prev => {
@@ -139,9 +300,11 @@ export function DataProvider({ children }) {
         name: `${original.name} (Cópia)`,
         createdAt: new Date().toISOString()
       };
-      return [...prev, copy];
+      const updated = [...prev, copy];
+      if (user?.id) syncRoutinesToCloud(user.id, updated);
+      return updated;
     });
-  }, []);
+  }, [user?.id]);
 
   // ---- CARDIO ROUTINES ACTIONS ----
   const addCardioRoutine = useCallback((routine) => {
@@ -157,7 +320,11 @@ export function DataProvider({ children }) {
       scheduledDay: routine.scheduledDay !== undefined && routine.scheduledDay !== '' && routine.scheduledDay !== null ? Number(routine.scheduledDay) : null,
       ...routine
     };
-    setCardioRoutines(prev => [...prev, newRoutine]);
+    setCardioRoutines(prev => {
+      const updated = [...prev, newRoutine];
+      if (user?.id) syncCardioRoutinesToCloud(user.id, updated);
+      return updated;
+    });
 
     // If scheduledDay is provided, also sync to weeklySchedule
     if (newRoutine.scheduledDay !== null && newRoutine.scheduledDay !== undefined) {
@@ -165,7 +332,7 @@ export function DataProvider({ children }) {
         const existing = prev[newRoutine.scheduledDay] || { type: 'rest', label: 'Descanso' };
         const hasW = Boolean(existing.hasWorkout || existing.type === 'workout' || existing.type === 'both');
         const wLabel = existing.workoutLabel || (hasW ? existing.label : '');
-        return {
+        const updatedSched = {
           ...prev,
           [newRoutine.scheduledDay]: {
             ...existing,
@@ -183,23 +350,32 @@ export function DataProvider({ children }) {
             label: hasW ? `${wLabel} + Cardio: ${newRoutine.name}` : `Cardio: ${newRoutine.name}`
           }
         };
+        if (user?.id) syncScheduleToCloud(user.id, updatedSched);
+        return updatedSched;
       });
     }
 
     return newRoutine;
-  }, []);
+  }, [user?.id]);
 
   const updateCardioRoutine = useCallback((id, updates) => {
-    setCardioRoutines(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
-  }, []);
+    setCardioRoutines(prev => {
+      const updated = prev.map(c => c.id === id ? { ...c, ...updates } : c);
+      if (user?.id) syncCardioRoutinesToCloud(user.id, updated);
+      return updated;
+    });
+  }, [user?.id]);
 
   const deleteCardioRoutine = useCallback((id) => {
-    setCardioRoutines(prev => prev.filter(c => c.id !== id));
-  }, []);
+    setCardioRoutines(prev => {
+      const updated = prev.filter(c => c.id !== id);
+      if (user?.id) syncCardioRoutinesToCloud(user.id, updated);
+      return updated;
+    });
+  }, [user?.id]);
 
   // ---- ACTIVE WORKOUT SESSION ----
   const startActiveWorkout = useCallback((routine) => {
-    // Helper: find the last checkin that contains an exercise with this exact name
     const findPreviousSets = (exerciseName) => {
       for (const checkin of checkins) {
         const match = checkin.exercises?.find(ex => ex.name === exerciseName);
@@ -210,7 +386,6 @@ export function DataProvider({ children }) {
       return null;
     };
 
-    // Clone exercises and ensure each set has completed: false
     const exercises = (routine?.exercises || []).map(ex => {
       const prevSets = findPreviousSets(ex.name);
 
@@ -280,7 +455,6 @@ export function DataProvider({ children }) {
     const durationSeconds = Math.max(1, Math.round((Date.now() - activeWorkout.startTime) / 1000));
     const durationMinutes = Math.max(1, Math.round(durationSeconds / 60));
 
-    // Compute volume, completed sets, and reps
     let totalVolume = 0;
     let completedSetsCount = 0;
     let completedRepsCount = 0;
@@ -333,24 +507,29 @@ export function DataProvider({ children }) {
       }))
     };
 
-    // Save checkin in user's history
+    // Save checkin in user's history and sync to cloud
     setCheckins(prev => [checkinData, ...prev]);
+    syncCheckinToCloud(checkinData);
 
     // Update routine notes if routine exists
     if (activeWorkout.routineId && activeWorkout.routineId !== 'free_workout') {
-      setRoutines(prev => prev.map(r => {
-        if (r.id === activeWorkout.routineId) {
-          const updatedExercises = r.exercises.map(origEx => {
-            const executedEx = activeWorkout.exercises.find(e => e.name === origEx.name);
-            return executedEx ? { ...origEx, notes: executedEx.notes } : origEx;
-          });
-          return { ...r, exercises: updatedExercises };
-        }
-        return r;
-      }));
+      setRoutines(prev => {
+        const updated = prev.map(r => {
+          if (r.id === activeWorkout.routineId) {
+            const updatedExercises = r.exercises.map(origEx => {
+              const executedEx = activeWorkout.exercises.find(e => e.name === origEx.name);
+              return executedEx ? { ...origEx, notes: executedEx.notes } : origEx;
+            });
+            return { ...r, exercises: updatedExercises };
+          }
+          return r;
+        });
+        if (user?.id) syncRoutinesToCloud(user.id, updated);
+        return updated;
+      });
     }
 
-    // Auto post to user's joined groups feed if enabled
+    // Auto post to user's joined groups feed if enabled and sync group to cloud
     if (shareToGroup) {
       setAllGroups(prev => prev.map(g => {
         const isMember = g.members?.some(m => m.id === user?.id);
@@ -377,7 +556,9 @@ export function DataProvider({ children }) {
             exercises: checkinData.exercises,
             comments: []
           };
-          return { ...g, feed: [feedItem, ...(g.feed || [])] };
+          const updatedG = { ...g, feed: [feedItem, ...(g.feed || [])] };
+          syncGroupToCloud(updatedG);
+          return updatedG;
         }
         return g;
       }));
@@ -425,6 +606,7 @@ export function DataProvider({ children }) {
     };
 
     setCheckins(prev => [checkinData, ...prev]);
+    syncCheckinToCloud(checkinData);
 
     if (shareToGroup) {
       setAllGroups(prev => prev.map(g => {
@@ -448,7 +630,9 @@ export function DataProvider({ children }) {
             likedBy: [],
             comments: []
           };
-          return { ...g, feed: [feedItem, ...(g.feed || [])] };
+          const updatedG = { ...g, feed: [feedItem, ...(g.feed || [])] };
+          syncGroupToCloud(updatedG);
+          return updatedG;
         }
         return g;
       }));
@@ -471,7 +655,6 @@ export function DataProvider({ children }) {
     };
     setJustifiedAbsences(prev => [absenceItem, ...prev]);
 
-    // Publish "Falta Justificada" in joined groups feed
     setAllGroups(prev => prev.map(g => {
       const isMember = g.members?.some(m => m.id === user?.id);
       if (isMember) {
@@ -493,7 +676,9 @@ export function DataProvider({ children }) {
           likedBy: [],
           comments: []
         };
-        return { ...g, feed: [feedItem, ...(g.feed || [])] };
+        const updatedG = { ...g, feed: [feedItem, ...(g.feed || [])] };
+        syncGroupToCloud(updatedG);
+        return updatedG;
       }
       return g;
     }));
@@ -512,6 +697,7 @@ export function DataProvider({ children }) {
       ...checkin
     };
     setCheckins(prev => [newCheckin, ...prev]);
+    syncCheckinToCloud(newCheckin);
     return newCheckin;
   }, [user]);
 
@@ -519,9 +705,8 @@ export function DataProvider({ children }) {
     setCheckins(prev => prev.filter(c => c.id !== id));
   }, []);
 
-  // ---- GROUPS SYSTEM (FULL FUNCTIONALITY) ----
+  // ---- GROUPS SYSTEM ----
   const createGroup = useCallback((groupData) => {
-    // Generate clean 6-char alphanumeric invite code
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let inviteCode = '';
     for (let i = 0; i < 6; i++) {
@@ -560,6 +745,10 @@ export function DataProvider({ children }) {
       const exists = prev.some(g => g.id === newGroup.id || (g.inviteCode && g.inviteCode === newGroup.inviteCode));
       return exists ? prev : [newGroup, ...prev];
     });
+
+    // Sync to Supabase Cloud immediately
+    syncGroupToCloud(newGroup);
+
     return newGroup;
   }, [user]);
 
@@ -568,14 +757,12 @@ export function DataProvider({ children }) {
 
     let cleaned = String(rawInput).trim();
 
-    // If full URL was pasted, extract the code/join parameter
     if (cleaned.includes('join=')) {
       cleaned = cleaned.split('join=')[1].split('&')[0];
     } else if (cleaned.includes('/groups/')) {
       cleaned = cleaned.split('/groups/')[1].split('?')[0].split('/')[0];
     }
 
-    // Remove common prefixes and symbols
     const normalizedCode = cleaned.replace(/^OG[-_]/i, '').replace(/[\s-]/g, '').toUpperCase();
 
     const newMember = memberProfile || {
@@ -590,14 +777,12 @@ export function DataProvider({ children }) {
       joinedAt: new Date().toISOString()
     };
 
-    // Find in allGroups by inviteCode or ID (case-insensitive)
     let targetGroup = allGroups.find(g => {
       const gCode = (g.inviteCode || '').toUpperCase();
       const gId = (g.id || '').toUpperCase();
       return gCode === normalizedCode || gId === normalizedCode || gCode === cleaned.toUpperCase() || g.id === cleaned;
     });
 
-    // Support encoded group payload for seamless cross-device sharing without backend
     if (!targetGroup && (cleaned.startsWith('OGP_') || cleaned.startsWith('ogp_'))) {
       try {
         const base64Data = cleaned.slice(4);
@@ -628,17 +813,17 @@ export function DataProvider({ children }) {
       return { success: false, error: 'Grupo não encontrado. Verifique o código com o criador!' };
     }
 
-    // Verify PIN if group is protected
     if (targetGroup.pin && targetGroup.pin !== pin) {
       return { success: false, error: 'PIN de acesso incorreto para este grupo.' };
     }
 
-    // Add member if not already joined
     setAllGroups(prev => prev.map(g => {
       if (g.id === targetGroup.id || g.inviteCode === targetGroup.inviteCode) {
         const memberExists = (g.members || []).some(m => m.id === newMember.id);
         if (!memberExists) {
-          return { ...g, members: [...(g.members || []), newMember] };
+          const updated = { ...g, members: [...(g.members || []), newMember] };
+          syncGroupToCloud(updated);
+          return updated;
         }
       }
       return g;
@@ -651,10 +836,12 @@ export function DataProvider({ children }) {
     if (!user?.id) return;
     setAllGroups(prev => prev.map(g => {
       if (g.id === groupId) {
-        return {
+        const updated = {
           ...g,
           members: (g.members || []).filter(m => m.id !== user.id)
         };
+        syncGroupToCloud(updated);
+        return updated;
       }
       return g;
     }));
@@ -662,6 +849,7 @@ export function DataProvider({ children }) {
 
   const deleteGroup = useCallback((groupId) => {
     setAllGroups(prev => prev.filter(g => g.id !== groupId));
+    deleteCloudGroup(groupId);
   }, []);
 
   const addGroupFeedItem = useCallback((groupId, feedItem) => {
@@ -679,7 +867,9 @@ export function DataProvider({ children }) {
 
     setAllGroups(prev => prev.map(g => {
       if (g.id === groupId) {
-        return { ...g, feed: [item, ...(g.feed || [])] };
+        const updated = { ...g, feed: [item, ...(g.feed || [])] };
+        syncGroupToCloud(updated);
+        return updated;
       }
       return g;
     }));
@@ -705,7 +895,9 @@ export function DataProvider({ children }) {
           }
           return post;
         });
-        return { ...g, feed: updatedFeed };
+        const updated = { ...g, feed: updatedFeed };
+        syncGroupToCloud(updated);
+        return updated;
       }
       return g;
     }));
@@ -733,7 +925,9 @@ export function DataProvider({ children }) {
           }
           return post;
         });
-        return { ...g, feed: updatedFeed };
+        const updated = { ...g, feed: updatedFeed };
+        syncGroupToCloud(updated);
+        return updated;
       }
       return g;
     }));
@@ -750,7 +944,11 @@ export function DataProvider({ children }) {
       timestamp: new Date().toISOString(),
       ...messageData
     };
-    setAllMessages(prev => [...prev, newMessage]);
+    setAllMessages(prev => {
+      const updated = [...prev, newMessage];
+      syncMessagesToCloud(groupId, updated.filter(m => m.groupId === groupId));
+      return updated;
+    });
     return newMessage;
   }, [user]);
 
@@ -761,7 +959,8 @@ export function DataProvider({ children }) {
   // ---- SCHEDULE ----
   const updateWeeklySchedule = useCallback((newSchedule) => {
     setWeeklySchedule(newSchedule);
-  }, []);
+    if (user?.id) syncScheduleToCloud(user.id, newSchedule);
+  }, [user?.id]);
 
   // Filter groups user is currently a member of
   const myGroups = allGroups.filter(g => g.members?.some(m => m.id === user?.id));
@@ -801,7 +1000,8 @@ export function DataProvider({ children }) {
       toggleFeedPostLike,
       addFeedPostComment,
       sendMessage,
-      getGroupMessages
+      getGroupMessages,
+      syncWithCloud
     }}>
       {children}
     </DataContext.Provider>

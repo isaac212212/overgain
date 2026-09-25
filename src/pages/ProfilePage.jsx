@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
@@ -20,12 +20,21 @@ import {
   Check,
   Calendar,
   Sparkles,
-  Shield
+  Shield,
+  Layers,
+  Dumbbell,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  History,
+  Zap,
+  Target
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
 import Avatar from '../components/ui/Avatar';
+import AnatomyMannequin from '../components/ui/AnatomyMannequin';
 import { 
   getMonthName, 
   getCalendarDaysCurrentOnly, 
@@ -45,25 +54,102 @@ const DAYS_OF_WEEK = [
   { id: 0, name: 'Domingo', short: 'Dom' },
 ];
 
+const MUSCLE_GROUPS = [
+  { id: 'Peitoral', label: 'Peito', icon: '🏋️' },
+  { id: 'Costas', label: 'Costas', icon: '🦅' },
+  { id: 'Pernas', label: 'Pernas', icon: '🦵' },
+  { id: 'Ombros', label: 'Ombros', icon: '🛡️' },
+  { id: 'Bíceps', label: 'Bíceps', icon: '💪' },
+  { id: 'Tríceps', label: 'Tríceps', icon: '⚡' },
+  { id: 'Abdômen', label: 'Abdômen', icon: '🧱' },
+  { id: 'Trapézio', label: 'Trapézio', icon: '⛰️' },
+  { id: 'Antebraço', label: 'Antebraço', icon: '✊' },
+  { id: 'Geral', label: 'Geral / Cardio', icon: '🔥' },
+];
+
+// Helper to normalize muscle group strings
+const matchMuscle = (targetGroup, exGroup, exName = '') => {
+  const t = targetGroup.toLowerCase();
+  const g = (exGroup || '').toLowerCase();
+  const n = (exName || '').toLowerCase();
+
+  if (t === 'peitoral' || t === 'peito') {
+    return g.includes('peit') || n.includes('supino') || n.includes('crucifixo') || n.includes('crossover') || n.includes('peck deck') || n.includes('flexão');
+  }
+  if (t === 'costas') {
+    return g.includes('cost') || g.includes('dors') || n.includes('puxada') || n.includes('remada') || n.includes('barra fixa') || n.includes('pulldown') || n.includes('serrote');
+  }
+  if (t === 'ombros') {
+    return g.includes('omb') || g.includes('delt') || n.includes('desenvolvimento') || n.includes('elevação') || n.includes('arnold');
+  }
+  if (t === 'bíceps' || t === 'biceps') {
+    return g.includes('bíc') || g.includes('bic') || n.includes('rosca') || n.includes('scott') || n.includes('martelo');
+  }
+  if (t === 'tríceps' || t === 'triceps') {
+    return g.includes('tríc') || g.includes('tric') || n.includes('tríceps') || n.includes('testa') || n.includes('pulley') || n.includes('frances') || n.includes('mergulho');
+  }
+  if (t === 'pernas') {
+    return g.includes('pern') || g.includes('quad') || g.includes('post') || g.includes('pant') || g.includes('coxa') || g.includes('glút') || n.includes('agachamento') || n.includes('leg press') || n.includes('extensora') || n.includes('flexora') || n.includes('stiff') || n.includes('panturrilha') || n.includes('afundo') || n.includes('hack');
+  }
+  if (t === 'abdômen' || t === 'abdomen') {
+    return g.includes('abd') || g.includes('core') || n.includes('abdominal') || n.includes('prancha') || n.includes('infra') || n.includes('crunch');
+  }
+  if (t === 'trapézio' || t === 'trapezio') {
+    return g.includes('trap') || n.includes('encolhimento') || n.includes('remada alta');
+  }
+  if (t === 'antebraço' || t === 'antebraco') {
+    return g.includes('anteb') || n.includes('punho') || n.includes('inversa');
+  }
+  return true;
+};
+
+// Helper: Calculate time difference in readable Portuguese format
+const formatTimeInterval = (date1, date2) => {
+  if (!date1 || !date2) return '';
+  const d1 = new Date(date1);
+  const d2 = new Date(date2);
+  const diffMs = Math.abs(d1 - d2);
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return 'no mesmo dia';
+  if (diffDays === 1) return 'em 1 dia';
+  if (diffDays < 7) return `em ${diffDays} dias`;
+  if (diffDays < 14) return 'em 1 semana';
+  if (diffDays < 30) {
+    const weeks = Math.round(diffDays / 7);
+    return `em ${weeks} semanas (${diffDays} dias)`;
+  }
+  if (diffDays < 60) return `em 1 mês (${diffDays} dias)`;
+  const months = Math.round(diffDays / 30);
+  return `em ${months} meses (${diffDays} dias)`;
+};
+
 export default function ProfilePage() {
   const { user, updateProfile, addMeasurement, updatePrivacy, updateWeeklyGoal, updatePassword } = useAuth();
   const { checkins, routines, weeklySchedule, updateWeeklySchedule } = useData();
   const stats = useFrequencyStats();
   const navigate = useNavigate();
 
-  // Stats controls: timeframe and metric
+  // Selected Muscle Group for Analytics & Mannequin
+  const [selectedMuscleGroup, setSelectedMuscleGroup] = useState('Peitoral');
   const [timeframe, setTimeframe] = useState('weeks'); // 'days' | 'weeks' | 'months' | 'years'
-  const [activeMetric, setActiveMetric] = useState('volume'); // 'volume' | 'prs' | 'workouts'
-  
+  const [activeMetric, setActiveMetric] = useState('volume'); // 'volume' | 'sets' | 'prs'
+
   // Calendar month state
   const [calendarDate, setCalendarDate] = useState(new Date());
   const calMonth = calendarDate.getMonth();
   const calYear = calendarDate.getFullYear();
   const calendarDays = getCalendarDaysCurrentOnly(calYear, calMonth);
 
-  // Measurements Modal state
+  // Measurements Modal & History State
   const [isMeasurementsModalOpen, setIsMeasurementsModalOpen] = useState(false);
-  const latestMeasurement = user?.measurementsHistory?.[0] || {
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  
+  const measurementsHistory = useMemo(() => {
+    return (user?.measurementsHistory || []).sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
+  }, [user?.measurementsHistory]);
+
+  const latestMeasurement = measurementsHistory[0] || {
     weight: 0,
     height: 0,
     leftArm: 0,
@@ -75,7 +161,8 @@ export default function ProfilePage() {
     calves: 0,
     date: new Date().toISOString().slice(0, 10)
   };
-  const previousMeasurement = user?.measurementsHistory?.[1] || null;
+
+  const previousMeasurement = measurementsHistory[1] || null;
 
   const [formMeasurements, setFormMeasurements] = useState(latestMeasurement);
   const [isEditingGoal, setIsEditingGoal] = useState(false);
@@ -138,6 +225,13 @@ export default function ProfilePage() {
     setIsMeasurementsModalOpen(false);
   };
 
+  // Handle Delete Measurement from history
+  const handleDeleteMeasurement = (entryId) => {
+    if (!user) return;
+    const updated = (user.measurementsHistory || []).filter(m => m.id !== entryId);
+    updateProfile({ measurementsHistory: updated });
+  };
+
   // Handle Save Schedule
   const handleSaveSchedule = (e) => {
     e.preventDefault();
@@ -145,63 +239,184 @@ export default function ProfilePage() {
     setIsScheduleModalOpen(false);
   };
 
-  // Dynamic Chart Data based on timeframe and metric
-  const getChartData = () => {
-    // Generate chart from real checkins
+  // =========================================================================
+  // MUSCLE GROUP ANALYTICS COMPUTATIONS (PRs, Sets, Exercises, Volume)
+  // =========================================================================
+  const muscleAnalytics = useMemo(() => {
+    const now = new Date();
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    let weeklySets = 0;
+    let monthlySets = 0;
+    let totalSets = 0;
+    let weeklyVolume = 0;
+    let monthlyVolume = 0;
+    let totalVolume = 0;
+
+    // Map of exercises: { [name]: { maxWeight, maxReps, estimated1RM, totalSets, totalReps, totalVolume, lastDate, prHistory: [] } }
+    const exercisesMap = {};
+
+    checkins.forEach(c => {
+      const cDate = new Date(c.date);
+      const isPastWeek = cDate >= oneWeekAgo;
+      const isPastMonth = cDate >= oneMonthAgo;
+
+      (c.exercises || []).forEach(ex => {
+        if (matchMuscle(selectedMuscleGroup, ex.muscleGroup, ex.name)) {
+          const exKey = ex.name.trim();
+          if (!exercisesMap[exKey]) {
+            exercisesMap[exKey] = {
+              name: exKey,
+              muscleGroup: ex.muscleGroup || selectedMuscleGroup,
+              maxWeight: 0,
+              maxReps: 0,
+              estimated1RM: 0,
+              totalSets: 0,
+              totalReps: 0,
+              totalVolume: 0,
+              lastDate: c.date,
+              sessionsCount: 0
+            };
+          }
+
+          exercisesMap[exKey].sessionsCount += 1;
+          if (new Date(c.date) > new Date(exercisesMap[exKey].lastDate)) {
+            exercisesMap[exKey].lastDate = c.date;
+          }
+
+          (ex.sets || []).forEach(s => {
+            if (s.completed) {
+              const w = Number(s.weight) || 0;
+              const r = Number(s.reps) || 0;
+              const vol = w * r;
+
+              totalSets += 1;
+              totalVolume += vol;
+              exercisesMap[exKey].totalSets += 1;
+              exercisesMap[exKey].totalReps += r;
+              exercisesMap[exKey].totalVolume += vol;
+
+              if (isPastWeek) {
+                weeklySets += 1;
+                weeklyVolume += vol;
+              }
+              if (isPastMonth) {
+                monthlySets += 1;
+                monthlyVolume += vol;
+              }
+
+              // PR evaluation
+              if (w > exercisesMap[exKey].maxWeight) {
+                exercisesMap[exKey].maxWeight = w;
+                exercisesMap[exKey].maxReps = r;
+              }
+
+              // 1RM Calculation (Brzycki Formula: w * (36 / (37 - r)))
+              if (w > 0 && r > 0) {
+                const e1rm = r === 1 ? w : Math.round(w * (36 / Math.max(1, 37 - Math.min(36, r))));
+                if (e1rm > exercisesMap[exKey].estimated1RM) {
+                  exercisesMap[exKey].estimated1RM = e1rm;
+                }
+              }
+            }
+          });
+        }
+      });
+    });
+
+    // Exercise ranking list sorted by maxWeight / volume
+    const exerciseList = Object.values(exercisesMap).sort((a, b) => b.maxWeight - a.maxWeight || b.totalVolume - a.totalVolume);
+
+    // Personal records (PRs) count & list
+    const prList = exerciseList.filter(e => e.maxWeight > 0);
+    const prCount = prList.length;
+
+    return {
+      weeklySets,
+      monthlySets,
+      totalSets,
+      weeklyVolume,
+      monthlyVolume,
+      totalVolume,
+      exerciseList,
+      prList,
+      prCount
+    };
+  }, [checkins, selectedMuscleGroup]);
+
+  // Dynamic Chart Data based on selected muscle group, timeframe and metric
+  const chartData = useMemo(() => {
     const grouped = {};
+
     checkins.forEach(c => {
       const d = new Date(c.date);
       let key = '';
       let label = '';
+
       if (timeframe === 'days') {
-        // Last 7 days
         key = d.toLocaleDateString();
         label = d.toLocaleDateString('pt-BR', { weekday: 'short' });
       } else if (timeframe === 'weeks') {
-        // Group by week of year approx (or last 4 weeks)
-        key = `Week ${Math.ceil(d.getDate() / 7)}`;
-        label = `Semana`;
+        const weekNum = Math.ceil(d.getDate() / 7);
+        key = `${d.getMonth() + 1}-W${weekNum}`;
+        label = `Sem ${weekNum}`;
       } else if (timeframe === 'months') {
-        key = d.getMonth();
+        key = `${d.getFullYear()}-${d.getMonth()}`;
         label = getMonthName(d.getMonth()).substring(0, 3);
       } else {
-        key = d.getFullYear();
+        key = `${d.getFullYear()}`;
         label = d.getFullYear().toString();
       }
 
-      if (!grouped[key]) grouped[key] = { label, volume: 0, prs: 0, workouts: 0, sortKey: d.getTime() };
-      
-      grouped[key].volume += c.totalVolumeKg || 0;
-      grouped[key].workouts += 1;
-      // We simulate PRs based on volume increase for simplicity
-      grouped[key].prs += (c.totalVolumeKg > 2000 ? 1 : 0);
+      if (!grouped[key]) {
+        grouped[key] = { label, volume: 0, sets: 0, prs: 0, sortKey: d.getTime() };
+      }
+
+      // Filter exercises by selected muscle group
+      (c.exercises || []).forEach(ex => {
+        if (matchMuscle(selectedMuscleGroup, ex.muscleGroup, ex.name)) {
+          (ex.sets || []).forEach(s => {
+            if (s.completed) {
+              const w = Number(s.weight) || 0;
+              const r = Number(s.reps) || 0;
+              grouped[key].volume += w * r;
+              grouped[key].sets += 1;
+              if (w >= 50) grouped[key].prs += 1;
+            }
+          });
+        }
+      });
     });
 
-    // Convert to array and sort
     const result = Object.values(grouped).sort((a, b) => a.sortKey - b.sortKey).slice(-7).map(g => {
       let val = 0;
       let display = '';
       if (activeMetric === 'volume') {
         val = g.volume;
-        display = g.volume >= 10000 ? (g.volume / 1000).toFixed(1) + 't' : g.volume.toLocaleString('pt-BR') + ' kg';
-      } else if (activeMetric === 'prs') {
-        val = g.prs;
-        display = g.prs + ' PRs';
+        display = g.volume >= 10000 ? (g.volume / 1000).toFixed(1) + 't' : g.volume > 0 ? `${g.volume.toLocaleString('pt-BR')} kg` : '0 kg';
+      } else if (activeMetric === 'sets') {
+        val = g.sets;
+        display = `${g.sets} séries`;
       } else {
-        val = g.workouts;
-        display = g.workouts + 'x';
+        val = g.prs;
+        display = `${g.prs} PRs`;
       }
       return { label: g.label, val, display };
     });
 
-    if (result.length === 0) {
-      return [{ label: 'Sem dados', val: 0, display: '0' }];
+    if (result.length === 0 || result.every(r => r.val === 0)) {
+      return [
+        { label: 'Sem 1', val: 0, display: '0' },
+        { label: 'Sem 2', val: 0, display: '0' },
+        { label: 'Sem 3', val: 0, display: '0' },
+        { label: 'Atual', val: 0, display: '0' }
+      ];
     }
     return result;
-  };
+  }, [checkins, selectedMuscleGroup, timeframe, activeMetric]);
 
-  const chartData = getChartData();
-  const maxVal = Math.max(...chartData.map(d => d.val), 1);
+  const maxChartVal = Math.max(...chartData.map(d => d.val), 1);
 
   return (
     <div className="profile-page animate-fade-in">
@@ -248,7 +463,7 @@ export default function ProfilePage() {
             {/* Counts */}
             <div className="profile-social-counts">
               <div className="count-item" onClick={() => setIsEditingGoal(true)} style={{ cursor: 'pointer' }}>
-                <strong className="text-accent">{user?.weeklyGoal || 5}x</strong>
+                <strong className="text-accent">{user?.weeklyGoal || 4}x</strong>
                 <span>Meta Semanal ✎</span>
               </div>
               <div className="count-item">
@@ -274,7 +489,438 @@ export default function ProfilePage() {
         </div>
       </Card>
 
-      {/* SECTION 1: ESCALA SEMANAL DE TREINOS NO PERFIL */}
+      {/* =========================================================================
+          SECTION 1: REFORMULAÇÃO DE PROGRESSO E ESTATÍSTICAS POR GRUPO MUSCULAR
+          ========================================================================= */}
+      <Card className="profile-muscle-analytics-card" padding="lg">
+        <div className="muscle-analytics-header">
+          <div className="header-titles">
+            <h2 className="profile-section-title">
+              <Activity size={20} className="text-accent" /> Progresso & Estatísticas por Grupo Muscular
+            </h2>
+            <p className="profile-section-subtitle">
+              Selecione o músculo para visualizar gráfico de volume, séries semanais/mensais, PRs e ranking de exercícios.
+            </p>
+          </div>
+        </div>
+
+        {/* Muscle Selector Pills */}
+        <div className="muscle-selector-scroll">
+          {MUSCLE_GROUPS.map(mg => {
+            const isActive = selectedMuscleGroup === mg.id || (selectedMuscleGroup === 'Peitoral' && mg.id === 'Peito');
+            return (
+              <button
+                key={mg.id}
+                type="button"
+                className={`muscle-pill-btn ${isActive ? 'active' : ''}`}
+                onClick={() => setSelectedMuscleGroup(mg.id)}
+              >
+                <span className="muscle-pill-icon">{mg.icon}</span>
+                <span className="muscle-pill-label">{mg.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Layout Grid: Interactive Anatomy Mannequin + Dynamic Charts & Stats */}
+        <div className="muscle-analytics-main-grid">
+          {/* Left: Anatomical Human Body Mannequin */}
+          <div className="anatomy-column">
+            <AnatomyMannequin 
+              selectedGroup={selectedMuscleGroup} 
+              onSelectGroup={(groupName) => setSelectedMuscleGroup(groupName)}
+            />
+          </div>
+
+          {/* Right: Evolution Chart, Metric Counters, and PR Highlights */}
+          <div className="analytics-details-column">
+            {/* Stat Counter Cards Row (Volume Semanal, Mensal, Séries, PRs) */}
+            <div className="muscle-stat-counters-grid">
+              <div className="m-stat-card highlight-accent">
+                <div className="m-stat-icon-wrap">
+                  <Layers size={18} />
+                </div>
+                <div className="m-stat-content">
+                  <span className="m-stat-label">Séries Semanais</span>
+                  <strong className="m-stat-val">{muscleAnalytics.weeklySets}</strong>
+                  <span className="m-stat-sub">nesta semana</span>
+                </div>
+              </div>
+
+              <div className="m-stat-card">
+                <div className="m-stat-icon-wrap">
+                  <CalendarIcon size={18} />
+                </div>
+                <div className="m-stat-content">
+                  <span className="m-stat-label">Séries Mensais</span>
+                  <strong className="m-stat-val">{muscleAnalytics.monthlySets}</strong>
+                  <span className="m-stat-sub">últimos 30 dias</span>
+                </div>
+              </div>
+
+              <div className="m-stat-card highlight-flame">
+                <div className="m-stat-icon-wrap">
+                  <Award size={18} />
+                </div>
+                <div className="m-stat-content">
+                  <span className="m-stat-label">Recordes (PRs)</span>
+                  <strong className="m-stat-val">{muscleAnalytics.prCount}</strong>
+                  <span className="m-stat-sub">neste grupo</span>
+                </div>
+              </div>
+
+              <div className="m-stat-card">
+                <div className="m-stat-icon-wrap">
+                  <Weight size={18} />
+                </div>
+                <div className="m-stat-content">
+                  <span className="m-stat-label">Volume Total</span>
+                  <strong className="m-stat-val">
+                    {muscleAnalytics.totalVolume >= 10000 
+                      ? `${(muscleAnalytics.totalVolume / 1000).toFixed(1)}t` 
+                      : `${muscleAnalytics.totalVolume.toLocaleString('pt-BR')} kg`}
+                  </strong>
+                  <span className="m-stat-sub">histórico acumulado</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Visual Volume Evolution Chart for Selected Muscle */}
+            <div className="muscle-chart-box">
+              <div className="chart-controls-bar">
+                <div className="chart-metric-pills">
+                  <button 
+                    type="button" 
+                    className={`chart-metric-tab ${activeMetric === 'volume' ? 'active' : ''}`}
+                    onClick={() => setActiveMetric('volume')}
+                  >
+                    Volume (kg)
+                  </button>
+                  <button 
+                    type="button" 
+                    className={`chart-metric-tab ${activeMetric === 'sets' ? 'active' : ''}`}
+                    onClick={() => setActiveMetric('sets')}
+                  >
+                    Séries
+                  </button>
+                  <button 
+                    type="button" 
+                    className={`chart-metric-tab ${activeMetric === 'prs' ? 'active' : ''}`}
+                    onClick={() => setActiveMetric('prs')}
+                  >
+                    PRs
+                  </button>
+                </div>
+
+                <div className="chart-timeframe-pills">
+                  <button 
+                    type="button" 
+                    className={`tf-pill ${timeframe === 'weeks' ? 'active' : ''}`}
+                    onClick={() => setTimeframe('weeks')}
+                  >
+                    4 Semanas
+                  </button>
+                  <button 
+                    type="button" 
+                    className={`tf-pill ${timeframe === 'months' ? 'active' : ''}`}
+                    onClick={() => setTimeframe('months')}
+                  >
+                    Meses
+                  </button>
+                </div>
+              </div>
+
+              {/* Bar Chart Bars */}
+              <div className="muscle-bars-track-wrap">
+                {chartData.map((d, idx) => {
+                  const heightPct = d.val > 0 ? Math.max(18, (d.val / maxChartVal) * 100) : 8;
+                  const isCurrent = idx === chartData.length - 1;
+
+                  return (
+                    <div key={idx} className="muscle-bar-col">
+                      <span className={`bar-value-number ${d.val > 0 ? 'has-data' : 'zero'}`}>
+                        {d.display}
+                      </span>
+                      <div className="bar-track-outer">
+                        <div 
+                          className={`bar-fill-inner ${d.val > 0 ? 'active' : 'empty'} ${isCurrent ? 'current-period' : ''}`}
+                          style={{ height: `${heightPct}%` }}
+                        />
+                      </div>
+                      <span className="bar-footer-label">{d.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* PRs Highlight Banner if any exist for this muscle */}
+            {muscleAnalytics.prList.length > 0 && (
+              <div className="muscle-prs-highlight-box">
+                <div className="prs-box-header">
+                  <Sparkles size={16} className="text-warning" />
+                  <h4>Recordes Pessoais (PRs) de {selectedMuscleGroup}</h4>
+                </div>
+                <div className="prs-badges-row">
+                  {muscleAnalytics.prList.slice(0, 4).map((pr, idx) => (
+                    <div key={idx} className="pr-trophy-badge">
+                      <span className="pr-ex-name">{pr.name}:</span>
+                      <strong className="pr-weight-val">{pr.maxWeight} kg</strong>
+                      {pr.estimated1RM > 0 && (
+                        <span className="pr-1rm-sub">1RM ~{pr.estimated1RM}kg</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Ranking & List of All Practiced Exercises for this Muscle Group */}
+        <div className="muscle-exercises-ranking-section">
+          <div className="ranking-section-title-row">
+            <h3 className="sub-section-title">
+              <Dumbbell size={18} className="text-accent" /> Exercícios Praticados de {selectedMuscleGroup} ({muscleAnalytics.exerciseList.length})
+            </h3>
+            <span className="ranking-hint-tag">Ordenado por Carga Máxima & Volume</span>
+          </div>
+
+          {muscleAnalytics.exerciseList.length > 0 ? (
+            <div className="exercises-ranking-cards-list">
+              {muscleAnalytics.exerciseList.map((ex, idx) => (
+                <div key={idx} className="exercise-ranking-row-card">
+                  <div className="rank-position-col">
+                    <span className={`rank-number-badge ${idx === 0 ? 'gold' : idx === 1 ? 'silver' : idx === 2 ? 'bronze' : ''}`}>
+                      #{idx + 1}
+                    </span>
+                  </div>
+
+                  <div className="ex-main-info-col">
+                    <strong className="ex-title">{ex.name}</strong>
+                    <div className="ex-meta-chips">
+                      <span className="chip-item">Sessões: <strong>{ex.sessionsCount}x</strong></span>
+                      <span className="chip-item">Total Séries: <strong>{ex.totalSets}</strong></span>
+                      <span className="chip-item">Último treino: <strong>{formatDate(ex.lastDate)}</strong></span>
+                    </div>
+                  </div>
+
+                  <div className="ex-pr-stats-col">
+                    <div className="stat-pr-block">
+                      <span className="stat-label">Carga Máxima (PR)</span>
+                      <strong className="stat-val-highlight">{ex.maxWeight > 0 ? `${ex.maxWeight} kg` : 'Sem carga'}</strong>
+                    </div>
+                    {ex.estimated1RM > 0 && (
+                      <div className="stat-pr-block 1rm-block">
+                        <span className="stat-label">1RM Estimado</span>
+                        <strong className="stat-val-1rm">{ex.estimated1RM} kg</strong>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-muscle-exercises-box">
+              <Dumbbell size={32} className="empty-icon" />
+              <p>Nenhum exercício registrado para <strong>{selectedMuscleGroup}</strong> ainda.</p>
+              <span>Conclua um treino contendo exercícios deste músculo para ver o ranking e histórico aqui!</span>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* =========================================================================
+          SECTION 2: HISTÓRICO E EVOLUÇÃO NA ABA DE MEDIDAS CORPORAIS
+          ========================================================================= */}
+      <Card className="profile-measurements-card" padding="lg">
+        <div className="profile-card-header-action">
+          <div>
+            <h3 className="profile-section-title">
+              <Ruler size={18} className="text-accent" /> Medidas Corporais & Evolução
+            </h3>
+            <p className="profile-section-subtitle">
+              {latestMeasurement.date 
+                ? `Última medição registrada em: ${formatDate(latestMeasurement.date)}` 
+                : 'Nenhuma medição registrada ainda. Clique em "Atualizar Medidas" para registrar.'}
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {measurementsHistory.length > 0 && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                icon={History}
+                onClick={() => setIsHistoryModalOpen(true)}
+              >
+                Ver Histórico ({measurementsHistory.length})
+              </Button>
+            )}
+            <Button 
+              variant="primary" 
+              size="sm" 
+              icon={Ruler}
+              onClick={() => {
+                setFormMeasurements({ ...latestMeasurement, date: new Date().toISOString().slice(0, 10) });
+                setIsMeasurementsModalOpen(true);
+              }}
+            >
+              Atualizar Medidas
+            </Button>
+          </div>
+        </div>
+
+        {/* IMC Highlight Banner */}
+        <div className="profile-imc-banner">
+          <div className="imc-left">
+            <span className="imc-tag">ÍNDICE DE MASSA CORPORAL (IMC)</span>
+            <div className="imc-number-row">
+              <strong className="imc-number">{userIMC.val}</strong>
+              <span className="imc-label-badge" style={{ backgroundColor: `${userIMC.color}22`, color: userIMC.color, borderColor: userIMC.color }}>
+                ● {userIMC.label}
+              </span>
+            </div>
+          </div>
+          <div className="imc-meta-pills">
+            <div className="imc-stat-pill">
+              <span>Peso</span>
+              <strong>{latestMeasurement.weight > 0 ? `${latestMeasurement.weight} kg` : '-'}</strong>
+            </div>
+            <div className="imc-stat-pill">
+              <span>Altura</span>
+              <strong>{latestMeasurement.height > 0 ? `${latestMeasurement.height} cm` : '-'}</strong>
+            </div>
+          </div>
+        </div>
+
+        {/* Current Measurements Grid */}
+        <div className="profile-measurements-grid">
+          <div className="measurement-cell">
+            <span className="m-label">Braço Esquerdo</span>
+            <strong className="m-val">{latestMeasurement.leftArm > 0 ? `${latestMeasurement.leftArm} cm` : '-'}</strong>
+          </div>
+          <div className="measurement-cell">
+            <span className="m-label">Braço Direito</span>
+            <strong className="m-val">{latestMeasurement.rightArm > 0 ? `${latestMeasurement.rightArm} cm` : '-'}</strong>
+          </div>
+          <div className="measurement-cell">
+            <span className="m-label">Cintura</span>
+            <strong className="m-val">{latestMeasurement.waist > 0 ? `${latestMeasurement.waist} cm` : '-'}</strong>
+          </div>
+          <div className="measurement-cell">
+            <span className="m-label">Peitoral</span>
+            <strong className="m-val">{latestMeasurement.chest > 0 ? `${latestMeasurement.chest} cm` : '-'}</strong>
+          </div>
+          <div className="measurement-cell">
+            <span className="m-label">Coxa Esquerda</span>
+            <strong className="m-val">{latestMeasurement.leftThigh > 0 ? `${latestMeasurement.leftThigh} cm` : '-'}</strong>
+          </div>
+          <div className="measurement-cell">
+            <span className="m-label">Coxa Direita</span>
+            <strong className="m-val">{latestMeasurement.rightThigh > 0 ? `${latestMeasurement.rightThigh} cm` : '-'}</strong>
+          </div>
+          <div className="measurement-cell">
+            <span className="m-label">Panturrilhas</span>
+            <strong className="m-val">{latestMeasurement.calves > 0 ? `${latestMeasurement.calves} cm` : '-'}</strong>
+          </div>
+        </div>
+
+        {/* Evolution comparison with exact time interval */}
+        {previousMeasurement && (
+          <div className="measurements-evolution-banner">
+            <div className="evolution-header-line">
+              <span className="evol-title">
+                📈 <strong>Evolução Corporal</strong> em relação a {formatDate(previousMeasurement.date)}:
+              </span>
+              <span className="evol-interval-pill">
+                ⏱️ {formatTimeInterval(latestMeasurement.date, previousMeasurement.date)}
+              </span>
+            </div>
+
+            <div className="evol-items-chips-grid">
+              {[
+                { label: 'Braço E.', curr: latestMeasurement.leftArm, prev: previousMeasurement.leftArm, unit: 'cm' },
+                { label: 'Braço D.', curr: latestMeasurement.rightArm, prev: previousMeasurement.rightArm, unit: 'cm' },
+                { label: 'Peitoral', curr: latestMeasurement.chest, prev: previousMeasurement.chest, unit: 'cm' },
+                { label: 'Cintura', curr: latestMeasurement.waist, prev: previousMeasurement.waist, unit: 'cm', invertColor: true },
+                { label: 'Coxa E.', curr: latestMeasurement.leftThigh, prev: previousMeasurement.leftThigh, unit: 'cm' },
+                { label: 'Coxa D.', curr: latestMeasurement.rightThigh, prev: previousMeasurement.rightThigh, unit: 'cm' },
+                { label: 'Panturrilha', curr: latestMeasurement.calves, prev: previousMeasurement.calves, unit: 'cm' },
+                { label: 'Peso', curr: latestMeasurement.weight, prev: previousMeasurement.weight, unit: 'kg' },
+              ].filter(item => Number(item.curr) > 0 && Number(item.prev) > 0).map(item => {
+                const diff = (Number(item.curr) - Number(item.prev)).toFixed(1);
+                const isPositive = Number(diff) > 0;
+                const isZero = Number(diff) === 0;
+                
+                // For waist, reduction is positive (green)
+                const isFavorable = item.invertColor ? Number(diff) < 0 : Number(diff) > 0;
+
+                return (
+                  <div key={item.label} className="evol-chip-card">
+                    <span className="chip-label">{item.label}</span>
+                    <div className="chip-values">
+                      <span className="chip-prev">{item.prev}{item.unit}</span>
+                      <span className="chip-arrow">→</span>
+                      <strong className="chip-curr">{item.curr}{item.unit}</strong>
+                    </div>
+                    <span className={`chip-diff-tag ${isZero ? 'zero' : isFavorable ? 'favorable' : 'neutral'}`}>
+                      {isPositive ? `+${diff}` : diff} {item.unit}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Mini Timeline of Recent Updates */}
+        {measurementsHistory.length > 0 && (
+          <div className="measurements-timeline-wrap">
+            <div className="timeline-header-row">
+              <span className="timeline-title">
+                📋 Registro de Histórico ({measurementsHistory.length} {measurementsHistory.length === 1 ? 'medição' : 'medições'})
+              </span>
+              <button 
+                type="button" 
+                className="view-all-history-btn"
+                onClick={() => setIsHistoryModalOpen(true)}
+              >
+                Ver todos os registros →
+              </button>
+            </div>
+
+            <div className="timeline-cards-list">
+              {measurementsHistory.slice(0, 3).map((m, idx) => {
+                const prevM = measurementsHistory[idx + 1] || null;
+                const interval = prevM ? formatTimeInterval(m.date, prevM.date) : null;
+
+                return (
+                  <div key={m.id || idx} className="history-timeline-entry">
+                    <div className="entry-header">
+                      <strong className="entry-date">📅 {formatDate(m.date)}</strong>
+                      {interval && (
+                        <span className="entry-interval">({interval} após medição anterior)</span>
+                      )}
+                    </div>
+                    <div className="entry-metrics-row">
+                      {m.weight > 0 && <span className="m-val-badge">Peso: <strong>{m.weight} kg</strong></span>}
+                      {m.leftArm > 0 && <span className="m-val-badge">Braço E.: <strong>{m.leftArm} cm</strong></span>}
+                      {m.rightArm > 0 && <span className="m-val-badge">Braço D.: <strong>{m.rightArm} cm</strong></span>}
+                      {m.chest > 0 && <span className="m-val-badge">Peitoral: <strong>{m.chest} cm</strong></span>}
+                      {m.waist > 0 && <span className="m-val-badge">Cintura: <strong>{m.waist} cm</strong></span>}
+                      {m.leftThigh > 0 && <span className="m-val-badge">Coxa: <strong>{m.leftThigh} cm</strong></span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* =========================================================================
+          SECTION 3: ESCALA SEMANAL DE TREINOS NO PERFIL
+          ========================================================================= */}
       <Card className="profile-schedule-card" padding="lg">
         <div className="profile-card-header-action">
           <div>
@@ -332,340 +978,107 @@ export default function ProfilePage() {
         </div>
       </Card>
 
-      {/* SECTION 2: SISTEMA DE MEDIDAS CORPORAIS & IMC */}
-      <Card className="profile-measurements-card" padding="lg">
-        <div className="profile-card-header-action">
-          <div>
-            <h3 className="profile-section-title">
-              <Ruler size={18} className="text-accent" /> Medidas Corporais & Evolução
-            </h3>
-            <p className="profile-section-subtitle">
-              {latestMeasurement.date 
-                ? `Última medição registrada em: ${formatDate(latestMeasurement.date)}` 
-                : 'Nenhuma medição registrada ainda. Clique em "Atualizar Medidas" para registrar.'}
+      {/* Calendar Card */}
+      <Card className="profile-calendar-card" padding="lg">
+        <div className="profile-cal-nav">
+          <button className="cal-nav-btn" onClick={prevMonth} aria-label="Mês anterior">
+            <ChevronLeft size={18} />
+          </button>
+          <h3 className="cal-nav-title">
+            {getMonthName(calMonth)} de {calYear}
+          </h3>
+          <button className="cal-nav-btn" onClick={nextMonth} aria-label="Próximo mês">
+            <ChevronRight size={18} />
+          </button>
+        </div>
+
+        <div className="profile-cal-weekdays">
+          <span>Seg</span>
+          <span>Ter</span>
+          <span>Qua</span>
+          <span>Qui</span>
+          <span>Sex</span>
+          <span>Sáb</span>
+          <span>Dom</span>
+        </div>
+
+        <div className="profile-cal-grid">
+          {calendarDays.map((dObj, idx) => {
+            if (!dObj) {
+              return <div key={`blank-${idx}`} className="profile-cal-cell calendar-day-blank" />;
+            }
+            const trained = hasWorkoutOnDay(dObj);
+            return (
+              <div 
+                key={idx}
+                className={`profile-cal-cell ${trained ? 'trained-active' : ''}`}
+              >
+                <span className="cal-num">{dObj.day}</span>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      {/* MODAL: HISTÓRICO COMPLETO DE MEDIÇÕES */}
+      {isHistoryModalOpen && (
+        <Modal
+          isOpen={isHistoryModalOpen}
+          onClose={() => setIsHistoryModalOpen(false)}
+          title="Histórico Completo de Medidas Corporais"
+          size="md"
+        >
+          <div className="full-history-modal-body">
+            <p className="history-modal-intro">
+              Todas as atualizações de medidas registradas na sua conta ao longo do tempo.
             </p>
-          </div>
-          <Button 
-            variant="secondary" 
-            size="sm" 
-            icon={Ruler}
-            onClick={() => {
-              setFormMeasurements({ ...latestMeasurement, date: new Date().toISOString().slice(0, 10) });
-              setIsMeasurementsModalOpen(true);
-            }}
-          >
-            Atualizar Medidas
-          </Button>
-        </div>
 
-        {/* IMC Highlight Banner */}
-        <div className="profile-imc-banner">
-          <div className="imc-left">
-            <span className="imc-tag">ÍNDICE DE MASSA CORPORAL (IMC)</span>
-            <div className="imc-number-row">
-              <strong className="imc-number">{userIMC.val}</strong>
-              <span className="imc-label-badge" style={{ backgroundColor: `${userIMC.color}22`, color: userIMC.color, borderColor: userIMC.color }}>
-                ● {userIMC.label}
-              </span>
-            </div>
-          </div>
-          <div className="imc-meta-pills">
-            <div className="imc-stat-pill">
-              <span>Peso</span>
-              <strong>{latestMeasurement.weight > 0 ? `${latestMeasurement.weight} kg` : '-'}</strong>
-            </div>
-            <div className="imc-stat-pill">
-              <span>Altura</span>
-              <strong>{latestMeasurement.height > 0 ? `${latestMeasurement.height} cm` : '-'}</strong>
-            </div>
-          </div>
-        </div>
+            <div className="full-history-scroll-list">
+              {measurementsHistory.map((m, idx) => {
+                const prevM = measurementsHistory[idx + 1] || null;
+                const interval = prevM ? formatTimeInterval(m.date, prevM.date) : null;
 
-        {/* Grid of Measurements */}
-        <div className="profile-measurements-grid">
-          <div className="measurement-cell">
-            <span className="m-label">Braço Esquerdo</span>
-            <strong className="m-val">{latestMeasurement.leftArm > 0 ? `${latestMeasurement.leftArm} cm` : '-'}</strong>
-          </div>
-          <div className="measurement-cell">
-            <span className="m-label">Braço Direito</span>
-            <strong className="m-val">{latestMeasurement.rightArm > 0 ? `${latestMeasurement.rightArm} cm` : '-'}</strong>
-          </div>
-          <div className="measurement-cell">
-            <span className="m-label">Cintura</span>
-            <strong className="m-val">{latestMeasurement.waist > 0 ? `${latestMeasurement.waist} cm` : '-'}</strong>
-          </div>
-          <div className="measurement-cell">
-            <span className="m-label">Peitoral</span>
-            <strong className="m-val">{latestMeasurement.chest > 0 ? `${latestMeasurement.chest} cm` : '-'}</strong>
-          </div>
-          <div className="measurement-cell">
-            <span className="m-label">Coxa Esquerda</span>
-            <strong className="m-val">{latestMeasurement.leftThigh > 0 ? `${latestMeasurement.leftThigh} cm` : '-'}</strong>
-          </div>
-          <div className="measurement-cell">
-            <span className="m-label">Coxa Direita</span>
-            <strong className="m-val">{latestMeasurement.rightThigh > 0 ? `${latestMeasurement.rightThigh} cm` : '-'}</strong>
-          </div>
-          <div className="measurement-cell">
-            <span className="m-label">Panturrilhas</span>
-            <strong className="m-val">{latestMeasurement.calves > 0 ? `${latestMeasurement.calves} cm` : '-'}</strong>
-          </div>
-        </div>
-
-        {/* Evolution comparison if previous measurement exists */}
-        {previousMeasurement && (
-          <div className="measurements-evolution-banner" style={{
-            marginTop: 18,
-            padding: '14px 16px',
-            background: 'var(--bg-elevated)',
-            borderRadius: 'var(--radius-md)',
-            border: '1px solid var(--border-color)'
-          }}>
-            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 10 }}>
-              📈 Comparativo de evolução (em relação a {previousMeasurement.date ? formatDate(previousMeasurement.date) : 'medição anterior'}):
-            </span>
-            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-              {[
-                { label: 'Braço E.', curr: latestMeasurement.leftArm, prev: previousMeasurement.leftArm, unit: 'cm' },
-                { label: 'Braço D.', curr: latestMeasurement.rightArm, prev: previousMeasurement.rightArm, unit: 'cm' },
-                { label: 'Peitoral', curr: latestMeasurement.chest, prev: previousMeasurement.chest, unit: 'cm' },
-                { label: 'Cintura', curr: latestMeasurement.waist, prev: previousMeasurement.waist, unit: 'cm' },
-                { label: 'Coxa E.', curr: latestMeasurement.leftThigh, prev: previousMeasurement.leftThigh, unit: 'cm' },
-                { label: 'Coxa D.', curr: latestMeasurement.rightThigh, prev: previousMeasurement.rightThigh, unit: 'cm' },
-                { label: 'Panturrilha', curr: latestMeasurement.calves, prev: previousMeasurement.calves, unit: 'cm' },
-                { label: 'Peso', curr: latestMeasurement.weight, prev: previousMeasurement.weight, unit: 'kg' },
-              ].filter(item => Number(item.curr) > 0 && Number(item.prev) > 0).map(item => {
-                const diff = (Number(item.curr) - Number(item.prev)).toFixed(1);
-                const isPositive = Number(diff) > 0;
-                const isZero = Number(diff) === 0;
                 return (
-                  <div key={item.label} style={{ fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: 4, background: 'var(--bg-card)', padding: '4px 8px', borderRadius: 'var(--radius-sm)' }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>{item.label}:</span>
-                    <strong>{item.prev} → {item.curr}{item.unit}</strong>
-                    <span style={{ 
-                      color: isZero ? 'var(--text-tertiary)' : isPositive ? '#22c55e' : '#ef4444',
-                      fontWeight: 700 
-                    }}>
-                      ({isPositive ? `+${diff}` : diff}{item.unit})
-                    </span>
+                  <div key={m.id || idx} className="full-history-card-item">
+                    <div className="card-top-row">
+                      <div className="date-box">
+                        <strong>📅 {formatDate(m.date)}</strong>
+                        {interval && <span className="time-interval-tag">⏱️ {interval}</span>}
+                      </div>
+                      <button 
+                        type="button" 
+                        className="delete-measurement-btn"
+                        onClick={() => handleDeleteMeasurement(m.id)}
+                        title="Excluir este registro"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+
+                    <div className="metrics-grid-compact">
+                      {m.weight > 0 && <div><span>Peso:</span><strong>{m.weight} kg</strong></div>}
+                      {m.height > 0 && <div><span>Altura:</span><strong>{m.height} cm</strong></div>}
+                      {m.leftArm > 0 && <div><span>Braço E.:</span><strong>{m.leftArm} cm</strong></div>}
+                      {m.rightArm > 0 && <div><span>Braço D.:</span><strong>{m.rightArm} cm</strong></div>}
+                      {m.chest > 0 && <div><span>Peitoral:</span><strong>{m.chest} cm</strong></div>}
+                      {m.waist > 0 && <div><span>Cintura:</span><strong>{m.waist} cm</strong></div>}
+                      {m.leftThigh > 0 && <div><span>Coxa E.:</span><strong>{m.leftThigh} cm</strong></div>}
+                      {m.rightThigh > 0 && <div><span>Coxa D.:</span><strong>{m.rightThigh} cm</strong></div>}
+                      {m.calves > 0 && <div><span>Panturrilhas:</span><strong>{m.calves} cm</strong></div>}
+                    </div>
                   </div>
                 );
               })}
             </div>
-          </div>
-        )}
 
-        {/* History timeline list */}
-        {user?.measurementsHistory && user.measurementsHistory.length > 0 && (
-          <div className="measurements-timeline" style={{ marginTop: 18 }}>
-            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 8 }}>
-              📋 Histórico de Medições ({user.measurementsHistory.length}):
-            </span>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {user.measurementsHistory.slice(0, 5).map((m, idx) => (
-                <div key={m.id || idx} style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '8px 12px',
-                  background: 'var(--bg-card)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.8125rem',
-                  border: '1px solid var(--border-subtle)',
-                  flexWrap: 'wrap',
-                  gap: 8
-                }}>
-                  <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                    📅 {m.date ? formatDate(m.date) : 'Sem data'}
-                  </span>
-                  <div style={{ display: 'flex', gap: 12, color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
-                    {m.weight > 0 && <span>Peso: <strong>{m.weight}kg</strong></span>}
-                    {m.leftArm > 0 && <span>Braço E.: <strong>{m.leftArm}cm</strong></span>}
-                    {m.rightArm > 0 && <span>Braço D.: <strong>{m.rightArm}cm</strong></span>}
-                    {m.chest > 0 && <span>Peito: <strong>{m.chest}cm</strong></span>}
-                    {m.waist > 0 && <span>Cintura: <strong>{m.waist}cm</strong></span>}
-                  </div>
-                </div>
-              ))}
+            <div className="modal-actions-bar">
+              <Button type="button" variant="primary" onClick={() => setIsHistoryModalOpen(false)}>
+                Fechar
+              </Button>
             </div>
           </div>
-        )}
-      </Card>
-
-      {/* SECTION 3: ESTATÍSTICAS E GRÁFICO FUNCIONAL E CLARO */}
-      <div className="profile-analytics-grid">
-        <Card className="profile-chart-card" padding="lg">
-          <div className="chart-card-header">
-            <div>
-              <h3 className="profile-section-title">
-                <TrendingUp size={18} className="text-accent" /> Progresso & Estatísticas
-              </h3>
-              <p className="profile-section-subtitle">Acompanhe sua evolução ao longo do tempo</p>
-            </div>
-
-            {/* Timeframe selector: Dias, Semanas, Meses, Anos */}
-            <div className="chart-timeframe-selector">
-              <button 
-                type="button" 
-                className={`timeframe-btn ${timeframe === 'days' ? 'active' : ''}`}
-                onClick={() => setTimeframe('days')}
-              >
-                7 Dias
-              </button>
-              <button 
-                type="button" 
-                className={`timeframe-btn ${timeframe === 'weeks' ? 'active' : ''}`}
-                onClick={() => setTimeframe('weeks')}
-              >
-                4 Semanas
-              </button>
-              <button 
-                type="button" 
-                className={`timeframe-btn ${timeframe === 'months' ? 'active' : ''}`}
-                onClick={() => setTimeframe('months')}
-              >
-                Meses
-              </button>
-              <button 
-                type="button" 
-                className={`timeframe-btn ${timeframe === 'years' ? 'active' : ''}`}
-                onClick={() => setTimeframe('years')}
-              >
-                Anos
-              </button>
-            </div>
-          </div>
-
-          {/* Metric Selector Tabs */}
-          <div className="chart-metric-selector-row">
-            <button 
-              type="button" 
-              className={`c-metric-btn ${activeMetric === 'volume' ? 'active' : ''}`}
-              onClick={() => setActiveMetric('volume')}
-            >
-              <Weight size={15} /> Volume Total (kg)
-            </button>
-            <button 
-              type="button" 
-              className={`c-metric-btn ${activeMetric === 'prs' ? 'active' : ''}`}
-              onClick={() => setActiveMetric('prs')}
-            >
-              <Sparkles size={15} /> Recordes / PRs
-            </button>
-            <button 
-              type="button" 
-              className={`c-metric-btn ${activeMetric === 'workouts' ? 'active' : ''}`}
-              onClick={() => setActiveMetric('workouts')}
-            >
-              <Activity size={15} /> Frequência
-            </button>
-          </div>
-
-          {/* Summary Evolution Banner */}
-          <div className="chart-evolution-summary">
-            {(() => {
-              const totalVolume = checkins.reduce((sum, c) => sum + (c.totalVolumeKg || 0), 0);
-              const totalWorkouts = checkins.filter(c => c.type !== 'cardio').length;
-              const totalPrs = checkins.reduce((sum, c) => sum + (c.totalVolumeKg > 2000 ? 1 : 0), 0);
-
-              return (
-                <>
-                  <div className="evol-main-stat">
-                    <span className="evol-number">
-                      {activeMetric === 'volume' && (totalVolume > 0 ? `${totalVolume.toLocaleString('pt-BR')} kg` : '0 kg')}
-                      {activeMetric === 'prs' && `${totalPrs} PRs`}
-                      {activeMetric === 'workouts' && `${totalWorkouts} Treinos`}
-                    </span>
-                    <span className="evol-sub">no período selecionado</span>
-                  </div>
-                  <div className="evol-growth-badge">
-                    {totalWorkouts > 0 ? (
-                      <>
-                        <span className="growth-tag">📈 {totalWorkouts} {totalWorkouts === 1 ? 'treino registrado' : 'treinos registrados'}</span>
-                        <span className="growth-hint">Acompanhando sua evolução real</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="growth-tag" style={{ color: 'var(--text-secondary)' }}>🌱 Sem treinos registrados</span>
-                        <span className="growth-hint">Conclua seu primeiro treino para acompanhar aqui!</span>
-                      </>
-                    )}
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-
-          {/* Intuitive and Easy to Understand Bar Chart with Numbers Printed on Top */}
-          <div className="chart-functional-bars-wrap">
-            {chartData.map((d, idx) => {
-              const heightPct = d.val > 0 ? Math.max(16, (d.val / maxVal) * 100) : 6;
-              const isLast = idx === chartData.length - 1;
-
-              return (
-                <div key={idx} className="chart-functional-col">
-                  {/* Exact Value printed right above the bar */}
-                  <span className={`bar-value-top ${d.val > 0 ? 'has-val' : 'is-zero'}`}>
-                    {d.display}
-                  </span>
-
-                  <div className="bar-track-functional">
-                    <div 
-                      className={`bar-fill-functional ${d.val > 0 ? 'filled' : 'empty'} ${isLast ? 'is-current' : ''}`}
-                      style={{ height: `${heightPct}%` }}
-                    />
-                  </div>
-
-                  <span className="bar-label-bottom">{d.label}</span>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-
-        {/* Calendar Card */}
-        <Card className="profile-calendar-card" padding="lg">
-          <div className="profile-cal-nav">
-            <button className="cal-nav-btn" onClick={prevMonth} aria-label="Mês anterior">
-              <ChevronLeft size={18} />
-            </button>
-            <h3 className="cal-nav-title">
-              {getMonthName(calMonth)} de {calYear}
-            </h3>
-            <button className="cal-nav-btn" onClick={nextMonth} aria-label="Próximo mês">
-              <ChevronRight size={18} />
-            </button>
-          </div>
-
-          <div className="profile-cal-weekdays">
-            <span>Seg</span>
-            <span>Ter</span>
-            <span>Qua</span>
-            <span>Qui</span>
-            <span>Sex</span>
-            <span>Sáb</span>
-            <span>Dom</span>
-          </div>
-
-          <div className="profile-cal-grid">
-            {calendarDays.map((dObj, idx) => {
-              if (!dObj) {
-                return <div key={`blank-${idx}`} className="profile-cal-cell calendar-day-blank" />;
-              }
-              const trained = hasWorkoutOnDay(dObj);
-              return (
-                <div 
-                  key={idx}
-                  className={`profile-cal-cell ${trained ? 'trained-active' : ''}`}
-                >
-                  <span className="cal-num">{dObj.day}</span>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      </div>
+        </Modal>
+      )}
 
       {/* MODAL: ATUALIZAR MEDIDAS CORPORAIS & IMC */}
       {isMeasurementsModalOpen && (
@@ -1030,9 +1443,9 @@ export default function ProfilePage() {
         </Modal>
       )}
 
-      {/* Workout History Log Feed (Inspired by Hevy screenshot 4) */}
+      {/* Workout History Log Feed */}
       <div className="profile-history-section">
-        <h2 className="history-section-title">Histórico de Treinos</h2>
+        <h2 className="history-section-title">Histórico Geral de Sessões</h2>
 
         <div className="history-cards-stack">
           {checkins.map(item => {
@@ -1045,7 +1458,7 @@ export default function ProfilePage() {
                   <div className="history-user-info">
                     <Avatar src={user?.avatar} name={user?.name} size="sm" />
                     <div>
-                      <span className="history-username">{user?.username || 'joaosilva'}</span>
+                      <span className="history-username">{user?.username || 'atleta'}</span>
                       <span className="history-timestamp">{formatDateTime(item.date)} • Só você</span>
                     </div>
                   </div>
@@ -1067,7 +1480,7 @@ export default function ProfilePage() {
                   </div>
                   <div className="h-metric">
                     <span className="h-metric-label">Repetições</span>
-                    <strong className="h-metric-val">{item.totalReps || 140}</strong>
+                    <strong className="h-metric-val">{item.totalReps || 0}</strong>
                   </div>
                 </div>
 
@@ -1079,9 +1492,9 @@ export default function ProfilePage() {
                 )}
 
                 {/* Exercises overview */}
-                {routineRef?.exercises && (
+                {item.exercises && item.exercises.length > 0 && (
                   <div className="history-exercises-breakdown">
-                    {routineRef.exercises.map((ex, exIdx) => (
+                    {item.exercises.map((ex, exIdx) => (
                       <div key={ex.id || exIdx} className="history-exercise-line">
                         <div className="line-left">
                           <span className="line-sets-badge">{ex.sets?.length || 3} séries</span>
