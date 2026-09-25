@@ -1790,7 +1790,7 @@ export default function GroupDetailPage() {
               <Button
                 variant="secondary"
                 fullWidth
-                icon={<Copy size={16} />}
+                icon={Copy}
                 onClick={handleCopyInviteCode}
               >
                 {copiedCode ? 'Código Copiado!' : 'Copiar Código de Convite'}
@@ -1799,7 +1799,7 @@ export default function GroupDetailPage() {
               <Button
                 variant="ghost"
                 fullWidth
-                icon={<LogOut size={16} />}
+                icon={LogOut}
                 style={{ color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.2)' }}
                 onClick={() => {
                   setIsSettingsOpen(false);
@@ -1813,7 +1813,7 @@ export default function GroupDetailPage() {
                 <Button
                   variant="ghost"
                   fullWidth
-                  icon={<ShieldAlert size={16} />}
+                  icon={ShieldAlert}
                   style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)' }}
                   onClick={() => {
                     setIsSettingsOpen(false);
