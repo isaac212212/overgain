@@ -34,7 +34,7 @@ export function AuthProvider({ children }) {
   // Pending user (during onboarding / registration)
   const [pendingUser, setPendingUser] = useState(() => storage.get('pending_user', null));
 
-  // Loading state with 3-second safety timeout for mobile / APK WebViews
+  // Loading state with 2.5-second safety timeout for mobile / APK WebViews
   const [isLoading, setIsLoading] = useState(true);
 
   // Sync user state with accounts & currentUserId
@@ -58,7 +58,7 @@ export function AuthProvider({ children }) {
     }
   }, [pendingUser]);
 
-  // Session verification and cloud sync on startup
+  // Supabase Auth State Change Listener & Session Verification
   useEffect(() => {
     let timeoutId = null;
     let isCancelled = false;
@@ -69,30 +69,50 @@ export function AuthProvider({ children }) {
       }
     }, 2500);
 
-    const verifySessionAndSync = async () => {
+    const initAuthSession = async () => {
       try {
-        if (currentUserId) {
-          // Fetch cloud measurements in background to merge
-          const cloudMeasurements = await fetchCloudMeasurements(currentUserId);
-          if (!isCancelled && Array.isArray(cloudMeasurements) && cloudMeasurements.length > 0) {
+        if (isCloudEnabled() && supabase?.auth?.getSession) {
+          const { data, error } = await supabase.auth.getSession();
+          if (!isCancelled && !error && data?.session?.user) {
+            const supaUser = data.session.user;
+            const supaUserId = supaUser.id;
+
+            // Fetch profile and measurements from cloud
+            const [cloudProf, cloudMeasurements] = await Promise.all([
+              fetchCloudProfile(supaUserId),
+              fetchCloudMeasurements(supaUserId)
+            ]);
+
             setUser(prev => {
-              if (!prev) return prev;
-              const localHistory = prev.measurementsHistory || [];
-              const map = new Map();
-              cloudMeasurements.forEach(m => map.set(m.id || m.date, m));
-              localHistory.forEach(m => {
-                const key = m.id || m.date;
-                if (!map.has(key)) map.set(key, m);
-              });
-              const merged = Array.from(map.values()).sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
-              const updated = { ...prev, measurementsHistory: merged };
-              setAccounts(accs => ({ ...accs, [prev.id]: updated }));
+              const base = prev || accounts[supaUserId] || {};
+              const updated = {
+                ...base,
+                id: supaUserId,
+                name: cloudProf?.name || supaUser.user_metadata?.name || base.name || supaUser.email.split('@')[0],
+                username: cloudProf?.username || supaUser.user_metadata?.username || base.username || supaUser.email.split('@')[0],
+                email: supaUser.email,
+                avatar: cloudProf?.avatar_url || base.avatar || null,
+                weeklyGoal: cloudProf?.weekly_goal || supaUser.user_metadata?.weekly_goal || base.weeklyGoal || 4,
+                gender: cloudProf?.gender || supaUser.user_metadata?.gender || base.gender || 'Masculino',
+                onboarded: true,
+                measurementsHistory: cloudMeasurements || base.measurementsHistory || [],
+                weeklySchedule: base.weeklySchedule || DEFAULT_WEEKLY_SCHEDULE,
+                privacy: base.privacy || {
+                  publicMeasurements: false,
+                  publicRoutines: true,
+                  publicWeights: false,
+                  publicPRs: false,
+                  publicRoutineWeights: false
+                }
+              };
+              setAccounts(accs => ({ ...accs, [supaUserId]: updated }));
+              setCurrentUserId(supaUserId);
               return updated;
             });
           }
         }
       } catch (err) {
-        console.warn('Session verification catch:', err);
+        console.warn('Supabase session verification catch:', err);
       } finally {
         if (!isCancelled) {
           clearTimeout(timeoutId);
@@ -101,24 +121,39 @@ export function AuthProvider({ children }) {
       }
     };
 
-    verifySessionAndSync();
+    initAuthSession();
+
+    // Listen for auth events (e.g. login/logout in other tabs)
+    let authSub = null;
+    try {
+      if (isCloudEnabled() && supabase?.auth?.onAuthStateChange) {
+        const { data } = supabase.auth.onAuthStateChange((event, session) => {
+          if (event === 'SIGNED_OUT') {
+            setCurrentUserId(null);
+            setUser(null);
+          }
+        });
+        authSub = data?.subscription;
+      }
+    } catch (e) {
+      console.warn('Auth state change subscription error:', e);
+    }
 
     return () => {
       isCancelled = true;
       if (timeoutId) clearTimeout(timeoutId);
+      if (authSub?.unsubscribe) authSub.unsubscribe();
     };
-  }, [currentUserId]);
+  }, []);
 
   // Login with existing or new Google Account
   const loginWithGoogle = async (googleEmail) => {
     const emailNorm = (googleEmail || 'usuario@gmail.com').trim().toLowerCase();
     
-    // Check local accounts first
     let existing = Object.values(accounts).find(
       acc => acc.email?.toLowerCase() === emailNorm
     );
 
-    // If not local, check Supabase cloud for cross-device login
     if (!existing) {
       try {
         const cloudAcc = await fetchCloudAccountByEmail(emailNorm);
@@ -139,7 +174,6 @@ export function AuthProvider({ children }) {
       return { isNew: false, user: existing };
     }
 
-    // New Google Account -> Create pending user and go to onboarding for Name, Photo, Gender
     const newPending = {
       id: existing?.id || 'usr_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
       name: emailNorm.split('@')[0],
@@ -166,75 +200,240 @@ export function AuthProvider({ children }) {
     return { isNew: true, pendingUser: newPending };
   };
 
-  // Login with Email & Password (with cloud fallback for PC <-> Mobile sync)
+  // Login with Email & Password (direct Supabase Auth integration + local fallback)
   const loginWithEmail = async (email, password) => {
     const emailNorm = email.trim().toLowerCase();
-    let existing = Object.values(accounts).find(
+
+    try {
+      if (isCloudEnabled() && supabase?.auth?.signInWithPassword) {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: emailNorm,
+          password: password
+        });
+
+        if (error) {
+          const msg = (error.message || '').toLowerCase();
+          if (msg.includes('invalid login credentials') || msg.includes('invalid_grant')) {
+            // Check local fallback
+            const localAcc = Object.values(accounts).find(
+              acc => acc.email?.toLowerCase() === emailNorm && (acc.password === password || acc.pin === password)
+            );
+            if (localAcc) {
+              setCurrentUserId(localAcc.id);
+              setUser(localAcc);
+              setPendingUser(null);
+              return { success: true, user: localAcc };
+            }
+
+            return {
+              success: false,
+              error: 'E-mail ou senha incorretos. Verifique e tente novamente.'
+            };
+          }
+          if (msg.includes('email not confirmed')) {
+            return {
+              success: false,
+              error: 'E-mail ainda não confirmado. Verifique sua caixa de entrada.'
+            };
+          }
+          if (msg.includes('rate limit') || msg.includes('security purposes') || error.status === 429) {
+            return {
+              success: false,
+              error: 'Muitas tentativas consecutivas. Aguarde alguns instantes e tente novamente.'
+            };
+          }
+          console.warn('Supabase signIn warning:', error.message);
+        } else if (data?.user) {
+          const cloudUser = data.user;
+          const cloudUserId = cloudUser.id;
+
+          const [cloudProf, cloudMeasurements] = await Promise.all([
+            fetchCloudProfile(cloudUserId),
+            fetchCloudMeasurements(cloudUserId)
+          ]);
+
+          const localExisting = accounts[cloudUserId] || Object.values(accounts).find(a => a.email?.toLowerCase() === emailNorm);
+
+          const loggedUser = {
+            id: cloudUserId,
+            name: cloudProf?.name || cloudUser.user_metadata?.name || localExisting?.name || emailNorm.split('@')[0],
+            username: cloudProf?.username || cloudUser.user_metadata?.username || localExisting?.username || emailNorm.split('@')[0],
+            email: emailNorm,
+            avatar: cloudProf?.avatar_url || localExisting?.avatar || null,
+            gender: cloudProf?.gender || cloudUser.user_metadata?.gender || localExisting?.gender || 'Masculino',
+            weeklyGoal: cloudProf?.weekly_goal || cloudUser.user_metadata?.weekly_goal || localExisting?.weeklyGoal || 4,
+            weeklySchedule: localExisting?.weeklySchedule || DEFAULT_WEEKLY_SCHEDULE,
+            privacy: localExisting?.privacy || {
+              publicMeasurements: false,
+              publicRoutines: true,
+              publicWeights: false,
+              publicPRs: false,
+              publicRoutineWeights: false
+            },
+            measurementsHistory: cloudMeasurements || localExisting?.measurementsHistory || [],
+            onboarded: true,
+            updatedAt: new Date().toISOString()
+          };
+
+          setAccounts(prev => {
+            const copy = { ...prev, [loggedUser.id]: loggedUser };
+            storage.set('accounts', copy);
+            return copy;
+          });
+
+          setCurrentUserId(loggedUser.id);
+          setUser(loggedUser);
+          setPendingUser(null);
+          storage.set('current_user_id', loggedUser.id);
+
+          return { success: true, user: loggedUser };
+        }
+      }
+    } catch (err) {
+      console.warn('Supabase signIn exception, trying local fallback:', err);
+    }
+
+    // Local cached accounts fallback
+    const existing = Object.values(accounts).find(
       acc => acc.email?.toLowerCase() === emailNorm
     );
 
-    // If account not found in local storage, check Supabase cloud (cross-device login)
     if (!existing) {
-      try {
-        const cloudAcc = await fetchCloudAccountByEmail(emailNorm);
-        if (cloudAcc && cloudAcc.id) {
-          existing = cloudAcc;
-          setAccounts(prev => ({ ...prev, [cloudAcc.id]: cloudAcc }));
-        }
-      } catch (err) {
-        console.warn('Cross device cloud check error:', err);
-      }
-    }
-
-    if (!existing) {
-      return { 
-        success: false, 
-        error: 'Nenhuma conta encontrada com este e-mail. Por favor, cadastre-se primeiro!' 
+      return {
+        success: false,
+        error: 'E-mail ou senha incorretos. Verifique e tente novamente.'
       };
     }
 
-    // Verify Password (or PIN if legacy account)
     const validPassword = existing.password ? (existing.password === password) : (existing.pin === password);
     if (!validPassword) {
       return {
         success: false,
-        error: 'Senha incorreta. Verifique e tente novamente.'
+        error: 'E-mail ou senha incorretos. Verifique e tente novamente.'
       };
     }
 
     setCurrentUserId(existing.id);
     setUser(existing);
     setPendingUser(null);
-
-    // Sync full profile and measurements with cloud in background
-    syncFullAccountToCloud(existing);
-
     return { success: true, user: existing };
   };
 
-  // Register with Email, Password, Name, Gender, Weekly Goal
+  // Register with Email, Password, Name, Gender, Weekly Goal (direct Supabase Auth signUp)
   const registerWithEmail = async (email, password, name, gender = 'Masculino', weeklyGoal = 4) => {
     const emailNorm = email.trim().toLowerCase();
-    let existing = Object.values(accounts).find(
+    const cleanName = (name || emailNorm.split('@')[0]).trim();
+
+    try {
+      if (isCloudEnabled() && supabase?.auth?.signUp) {
+        const { data, error } = await supabase.auth.signUp({
+          email: emailNorm,
+          password: password,
+          options: {
+            data: {
+              name: cleanName,
+              gender: gender || 'Masculino',
+              weekly_goal: Number(weeklyGoal) || 4
+            }
+          }
+        });
+
+        if (error) {
+          const msg = (error.message || '').toLowerCase();
+          if (msg.includes('already registered') || msg.includes('already exists')) {
+            return {
+              success: false,
+              error: 'Este e-mail já está cadastrado. Faça login na sua conta.'
+            };
+          }
+          if (msg.includes('at least 6 characters') || msg.includes('password')) {
+            return {
+              success: false,
+              error: 'A senha deve ter no mínimo 6 caracteres.'
+            };
+          }
+          if (msg.includes('rate limit') || msg.includes('security purposes') || error.status === 429) {
+            return {
+              success: false,
+              error: 'Muitas tentativas em pouco tempo. Aguarde alguns segundos e tente novamente.'
+            };
+          }
+          return {
+            success: false,
+            error: error.message || 'Erro ao realizar cadastro.'
+          };
+        }
+
+        // Check if user already exists (Supabase security returns empty identities)
+        if (data?.user && data.user.identities && data.user.identities.length === 0) {
+          return {
+            success: false,
+            error: 'Este e-mail já está cadastrado. Faça login na sua conta.'
+          };
+        }
+
+        const userId = data?.user?.id || 'usr_' + Date.now().toString(36);
+        const newUser = {
+          id: userId,
+          name: cleanName,
+          username: cleanName.toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 20),
+          email: emailNorm,
+          password: password,
+          avatar: null,
+          gender: gender || 'Masculino',
+          weeklyGoal: Number(weeklyGoal) || 4,
+          onboarded: true,
+          weeklySchedule: DEFAULT_WEEKLY_SCHEDULE,
+          privacy: {
+            publicMeasurements: false,
+            publicRoutines: true,
+            publicWeights: false,
+            publicPRs: false,
+            publicRoutineWeights: false
+          },
+          measurementsHistory: [],
+          createdAt: new Date().toISOString()
+        };
+
+        setAccounts(prev => {
+          const updated = { ...prev, [newUser.id]: newUser };
+          storage.set('accounts', updated);
+          return updated;
+        });
+
+        setCurrentUserId(newUser.id);
+        setUser(newUser);
+        setPendingUser(null);
+        storage.set('current_user_id', newUser.id);
+
+        // Sync profile to cloud tables
+        syncFullAccountToCloud(newUser);
+
+        return { success: true, user: newUser };
+      }
+    } catch (err) {
+      console.warn('Supabase signUp exception, using local fallback:', err);
+    }
+
+    // Local fallback if Supabase is offline
+    const existing = Object.values(accounts).find(
       acc => acc.email?.toLowerCase() === emailNorm
     );
-
     if (existing) {
       return {
         success: false,
-        error: 'Já existe uma conta cadastrada com este e-mail. Faça login.'
+        error: 'Este e-mail já está cadastrado. Faça login na sua conta.'
       };
     }
 
-    const cleanName = (name || emailNorm.split('@')[0]).trim();
     const newUser = {
-      id: 'usr_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
+      id: 'usr_' + Date.now().toString(36),
       name: cleanName,
       username: cleanName.toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 20),
       email: emailNorm,
       password: password,
       avatar: null,
-      gender: gender || 'Prefiro não informar',
+      gender: gender || 'Masculino',
       weeklyGoal: Number(weeklyGoal) || 4,
       onboarded: true,
       weeklySchedule: DEFAULT_WEEKLY_SCHEDULE,
@@ -249,7 +448,6 @@ export function AuthProvider({ children }) {
       createdAt: new Date().toISOString()
     };
 
-    // Save account locally
     setAccounts(prev => {
       const updated = { ...prev, [newUser.id]: newUser };
       storage.set('accounts', updated);
@@ -260,9 +458,6 @@ export function AuthProvider({ children }) {
     setUser(newUser);
     setPendingUser(null);
     storage.set('current_user_id', newUser.id);
-
-    // Immediately sync to Supabase Cloud
-    syncFullAccountToCloud(newUser);
 
     return { success: true, user: newUser };
   };
@@ -282,7 +477,6 @@ export function AuthProvider({ children }) {
       updatedAt: new Date().toISOString()
     };
 
-    // Save account in accounts map
     setAccounts(prev => {
       const updated = { ...prev, [finalUser.id]: finalUser };
       storage.set('accounts', updated);
@@ -294,7 +488,6 @@ export function AuthProvider({ children }) {
     setPendingUser(null);
     storage.set('current_user_id', finalUser.id);
 
-    // Sync to Cloud
     syncFullAccountToCloud(finalUser);
 
     return finalUser;
@@ -311,7 +504,6 @@ export function AuthProvider({ children }) {
       return copy;
     });
 
-    // Cloud sync
     syncFullAccountToCloud(updated);
   };
 
@@ -336,7 +528,6 @@ export function AuthProvider({ children }) {
       return copy;
     });
 
-    // Sync measurements to cloud
     syncMeasurementsToCloud(user.id, updatedHistory);
     syncFullAccountToCloud(updated);
   };
@@ -355,8 +546,15 @@ export function AuthProvider({ children }) {
   };
 
   // Update password
-  const updatePassword = (newPassword) => {
+  const updatePassword = async (newPassword) => {
     if (!user) return;
+    try {
+      if (isCloudEnabled() && supabase?.auth?.updateUser) {
+        await supabase.auth.updateUser({ password: newPassword });
+      }
+    } catch (e) {
+      console.warn('Supabase password update exception:', e);
+    }
     const updated = { ...user, password: newPassword, updatedAt: new Date().toISOString() };
     setUser(updated);
     setAccounts(prev => {
@@ -406,7 +604,14 @@ export function AuthProvider({ children }) {
   };
 
   // Logout
-  const logout = () => {
+  const logout = async () => {
+    try {
+      if (isCloudEnabled() && supabase?.auth?.signOut) {
+        await supabase.auth.signOut();
+      }
+    } catch (e) {
+      console.warn('Supabase signOut exception:', e);
+    }
     setCurrentUserId(null);
     setUser(null);
     setPendingUser(null);

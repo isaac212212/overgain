@@ -78,42 +78,45 @@ export default function LoginPage() {
     setErrorMsg('');
     setLoading(true);
 
-    await new Promise(r => setTimeout(r, 350));
-
-    if (isLogin) {
-      const res = loginWithEmail(email, password);
-      if (res.success) {
-        navigate('/dashboard');
+    try {
+      if (isLogin) {
+        const res = await loginWithEmail(email, password);
+        if (res && res.success) {
+          navigate('/dashboard');
+        } else {
+          setErrorMsg(res?.error || 'Credenciais inválidas. Verifique e tente novamente.');
+        }
       } else {
-        setErrorMsg(res.error || 'Credenciais inválidas. Verifique e tente novamente.');
-      }
-    } else {
-      // Validate Registration
-      if (!name.trim()) {
-        setErrorMsg('Por favor, informe seu nome ou apelido.');
-        setLoading(false);
-        return;
-      }
-      if (password.length < 6) {
-        setErrorMsg('A senha deve conter no mínimo 6 caracteres.');
-        setLoading(false);
-        return;
-      }
-      if (password !== confirmPassword) {
-        setErrorMsg('As senhas digitadas não coincidem.');
-        setLoading(false);
-        return;
-      }
+        // Validate Registration
+        if (!name.trim()) {
+          setErrorMsg('Por favor, informe seu nome ou apelido.');
+          setLoading(false);
+          return;
+        }
+        if (password.length < 6) {
+          setErrorMsg('A senha deve conter no mínimo 6 caracteres.');
+          setLoading(false);
+          return;
+        }
+        if (password !== confirmPassword) {
+          setErrorMsg('As senhas digitadas não coincidem.');
+          setLoading(false);
+          return;
+        }
 
-      const res = registerWithEmail(email, password, name, gender, weeklyGoal);
-      if (res.success) {
-        navigate('/dashboard');
-      } else {
-        setErrorMsg(res.error || 'Erro ao criar conta. Tente novamente.');
+        const res = await registerWithEmail(email, password, name, gender, weeklyGoal);
+        if (res && res.success) {
+          navigate('/dashboard');
+        } else {
+          setErrorMsg(res?.error || 'Erro ao criar conta. Tente novamente.');
+        }
       }
+    } catch (err) {
+      console.warn('Login/Register exception:', err);
+      setErrorMsg(err?.message || 'Ocorreu um erro ao processar sua solicitação.');
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   return (
