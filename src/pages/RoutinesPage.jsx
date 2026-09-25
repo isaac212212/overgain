@@ -22,7 +22,9 @@ import {
   ClipboardList,
   Camera,
   Upload,
-  Activity
+  Activity,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
@@ -314,6 +316,30 @@ export default function RoutinesPage() {
   // Remove exercise from form
   const handleRemoveExercise = (idx) => {
     setFormExercises(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  // Move exercise up in form
+  const handleMoveExerciseUp = (idx) => {
+    if (idx <= 0) return;
+    setFormExercises(prev => {
+      const copy = [...prev];
+      const temp = copy[idx - 1];
+      copy[idx - 1] = copy[idx];
+      copy[idx] = temp;
+      return copy;
+    });
+  };
+
+  // Move exercise down in form
+  const handleMoveExerciseDown = (idx) => {
+    setFormExercises(prev => {
+      if (idx >= prev.length - 1) return prev;
+      const copy = [...prev];
+      const temp = copy[idx + 1];
+      copy[idx + 1] = copy[idx];
+      copy[idx] = temp;
+      return copy;
+    });
   };
 
   // Update exercise field
@@ -1159,14 +1185,54 @@ export default function RoutinesPage() {
                           </h4>
                         </div>
                       </div>
-                      <button 
-                        type="button" 
-                        className="editor-remove-btn"
-                        onClick={() => handleRemoveExercise(eIdx)}
-                        title="Remover exercício"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <button 
+                          type="button" 
+                          onClick={() => handleMoveExerciseUp(eIdx)}
+                          disabled={eIdx === 0}
+                          title="Mover para cima"
+                          style={{
+                            padding: '6px 8px',
+                            borderRadius: 'var(--radius-sm)',
+                            border: '1px solid var(--border-color)',
+                            background: 'var(--bg-elevated)',
+                            color: eIdx === 0 ? 'var(--text-disabled)' : 'var(--text-primary)',
+                            cursor: eIdx === 0 ? 'not-allowed' : 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            opacity: eIdx === 0 ? 0.35 : 1
+                          }}
+                        >
+                          <ArrowUp size={15} />
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={() => handleMoveExerciseDown(eIdx)}
+                          disabled={eIdx === formExercises.length - 1}
+                          title="Mover para baixo"
+                          style={{
+                            padding: '6px 8px',
+                            borderRadius: 'var(--radius-sm)',
+                            border: '1px solid var(--border-color)',
+                            background: 'var(--bg-elevated)',
+                            color: eIdx === formExercises.length - 1 ? 'var(--text-disabled)' : 'var(--text-primary)',
+                            cursor: eIdx === formExercises.length - 1 ? 'not-allowed' : 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            opacity: eIdx === formExercises.length - 1 ? 0.35 : 1
+                          }}
+                        >
+                          <ArrowDown size={15} />
+                        </button>
+                        <button 
+                          type="button" 
+                          className="editor-remove-btn"
+                          onClick={() => handleRemoveExercise(eIdx)}
+                          title="Remover exercício"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </div>
 
                   {/* Sets */}

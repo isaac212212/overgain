@@ -1,9 +1,9 @@
 import React, { useMemo } from 'react';
 import { useData } from '../contexts/DataContext';
-import { isSameWeek, isSameMonth, isSameYear } from '../utils/dateHelpers';
+import { isSameWeek, isSameMonth, isSameYear, isSameDay } from '../utils/dateHelpers';
 
 export function useFrequencyStats() {
-  const { checkins } = useData();
+  const { checkins, weeklySchedule, justifiedAbsences } = useData();
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -20,51 +20,75 @@ export function useFrequencyStats() {
     const yearWorkouts = workoutCheckins.filter(c => isSameYear(c.date, now));
     const yearCardios = cardioCheckins.filter(c => isSameYear(c.date, now));
 
-    // Get unique days in the current week for workouts (musculação)
+    // Unique days trained this week
     const uniqueWeekDays = new Set(
-      weekWorkouts.map(c => new Date(c.date).toDateString())
+      workoutCheckins.filter(c => isSameWeek(c.date, now)).map(c => new Date(c.date).toDateString())
     ).size;
 
-    // Current streak (based on workouts)
+    // =========================================================================
+    // STREAK CALCULATION (DIAS SEGUIDOS / OFENSIVA COM SUPORTE A FALTA JUSTIFICADA)
+    // =========================================================================
     let streak = 0;
-    const sortedDates = [...new Set(workoutCheckins.map(c => new Date(c.date).toDateString()))]
-      .sort((a, b) => new Date(b) - new Date(a));
+
+    // Set of dates where workouts/cardios were completed
+    const doneDatesSet = new Set(
+      checkins.map(c => new Date(c.date).toDateString())
+    );
+
+    // Set of dates where an absence was justified
+    const justifiedDatesSet = new Set(
+      (justifiedAbsences || []).map(a => new Date(a.date).toDateString())
+    );
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const todayStr = today.toDateString();
+    const trainedToday = doneDatesSet.has(todayStr);
+    const justifiedToday = justifiedDatesSet.has(todayStr);
+
+    // Determine whether to start evaluation from today or yesterday
+    let currentEvalDate = new Date(today);
     
-    if (sortedDates.length > 0) {
-      let currentDate = new Date();
-      currentDate.setHours(0, 0, 0, 0);
-      
-      // Check if trained today, if not check yesterday
-      if (sortedDates[0] !== currentDate.toDateString()) {
-        currentDate.setDate(currentDate.getDate() - 1);
-        if (sortedDates[0] !== currentDate.toDateString()) {
-          streak = 0;
-        } else {
-          streak = 1;
-          let idx = 1;
-          while (idx < sortedDates.length) {
-            currentDate.setDate(currentDate.getDate() - 1);
-            if (sortedDates[idx] === currentDate.toDateString()) {
-              streak++;
-              idx++;
-            } else {
-              break;
-            }
-          }
-        }
+    if (trainedToday) {
+      streak++;
+      currentEvalDate.setDate(currentEvalDate.getDate() - 1);
+    } else if (justifiedToday) {
+      currentEvalDate.setDate(currentEvalDate.getDate() - 1);
+    } else {
+      // Check if today was a scheduled day. If not trained yet today, we check from yesterday
+      currentEvalDate.setDate(currentEvalDate.getDate() - 1);
+    }
+
+    // Step backwards through past days (up to 365 days)
+    for (let i = 0; i < 365; i++) {
+      const evalDateStr = currentEvalDate.toDateString();
+      const dayOfWeek = currentEvalDate.getDay(); // 0 = Domingo, 1 = Segunda, ...
+
+      const scheduleEntry = weeklySchedule?.[dayOfWeek] || { type: 'rest' };
+      const isScheduledWorkoutDay = Boolean(
+        scheduleEntry.hasWorkout || 
+        scheduleEntry.hasCardio || 
+        scheduleEntry.type === 'workout' || 
+        scheduleEntry.type === 'cardio' || 
+        scheduleEntry.type === 'both'
+      );
+
+      const didTrain = doneDatesSet.has(evalDateStr);
+      const wasJustified = justifiedDatesSet.has(evalDateStr);
+
+      if (didTrain) {
+        streak++;
+      } else if (wasJustified) {
+        // Justified absence preserves the streak counter
+      } else if (isScheduledWorkoutDay) {
+        // Scheduled workout day missed without justified absence -> Streak is broken / reset to 0!
+        break;
       } else {
-        streak = 1;
-        let idx = 1;
-        while (idx < sortedDates.length) {
-          currentDate.setDate(currentDate.getDate() - 1);
-          if (sortedDates[idx] === currentDate.toDateString()) {
-            streak++;
-            idx++;
-          } else {
-            break;
-          }
-        }
+        // Scheduled rest day: preserves streak without requiring workout
       }
+
+      currentEvalDate.setDate(currentEvalDate.getDate() - 1);
     }
 
     // Weekly data for chart (last 12 weeks)
@@ -95,7 +119,9 @@ export function useFrequencyStats() {
       streak,
       weeklyData
     };
-  }, [checkins]);
+  }, [checkins, weeklySchedule, justifiedAbsences]);
 
   return stats;
 }
+
+export default useFrequencyStats;

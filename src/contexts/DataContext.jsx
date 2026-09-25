@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
-import { generateId } from '../utils/storage';
+import { generateId, storage } from '../utils/storage';
 import { DEFAULT_WEEKLY_SCHEDULE } from '../utils/initialData';
 import { 
   fetchCloudGroups, 
@@ -38,11 +38,15 @@ export function DataProvider({ children }) {
   const [weeklySchedule, setWeeklySchedule] = useState(DEFAULT_WEEKLY_SCHEDULE);
   const [activeWorkout, setActiveWorkout] = useState(null);
   const [isDataLoading, setIsDataLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
 
   // ---- GLOBAL SHARED GROUPS & MESSAGES DATABASE ----
   const [allGroups, setAllGroups] = useState([]);
   const [allMessages, setAllMessages] = useState([]);
   const [justifiedAbsences, setJustifiedAbsences] = useState([]);
+
+  // Queue ref for pending offline syncs
+  const isSyncingRef = useRef(false);
 
   const filterLegacyMockCardios = (cardios) => {
     if (!Array.isArray(cardios)) return [];
@@ -50,9 +54,95 @@ export function DataProvider({ children }) {
   };
 
   // =========================================================================
-  // SUPABASE DIRECT CLOUD FETCH (CROSS-DEVICE: PC <-> MOBILE)
+  // 1. OFFLINE QUEUE & RETRY ENGINE
+  // =========================================================================
+  const getOfflineQueue = useCallback(() => {
+    return storage.get('offline_sync_queue', []);
+  }, []);
+
+  const addToOfflineQueue = useCallback((action) => {
+    const current = storage.get('offline_sync_queue', []);
+    const updated = [...current, { id: generateId(), timestamp: Date.now(), ...action }];
+    storage.set('offline_sync_queue', updated);
+    showToast('Salvo em modo offline. Será sincronizado ao reconectar.', 'info', 4000);
+  }, []);
+
+  const processOfflineQueue = useCallback(async () => {
+    if (isSyncingRef.current) return;
+    const queue = storage.get('offline_sync_queue', []);
+    if (!queue || queue.length === 0) return;
+
+    isSyncingRef.current = true;
+    showToast('Conexão restabelecida! Sincronizando dados pendentes...', 'info', 3000);
+
+    const remaining = [];
+    for (const item of queue) {
+      try {
+        if (item.type === 'checkins' && item.userId) {
+          await syncCheckinsToCloud(item.userId, item.payload);
+        } else if (item.type === 'routines' && item.userId) {
+          await syncRoutinesToCloud(item.userId, item.payload);
+        } else if (item.type === 'cardio' && item.userId) {
+          await syncCardioRoutinesToCloud(item.userId, item.payload);
+        } else if (item.type === 'schedule' && item.userId) {
+          await syncScheduleToCloud(item.userId, item.payload);
+        } else if (item.type === 'groups') {
+          await syncGroupsToCloud(item.payload);
+        } else if (item.type === 'absences' && item.userId) {
+          await syncAbsencesToCloud(item.userId, item.payload);
+        } else if (item.type === 'messages' && item.groupId) {
+          await syncMessagesToCloud(item.groupId, item.payload);
+        }
+      } catch (err) {
+        console.error('Falha ao processar item da fila offline:', item, err);
+        remaining.push(item);
+      }
+    }
+
+    storage.set('offline_sync_queue', remaining);
+    isSyncingRef.current = false;
+
+    if (remaining.length === 0) {
+      showToast('Todos os treinos e dados foram sincronizados na nuvem!', 'success', 4000);
+      syncWithCloud();
+    }
+  }, []);
+
+  // Listen to network status changes
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      processOfflineQueue();
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      showToast('Você está sem conexão. Os treinos serão salvos localmente.', 'info', 4000);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Initial check
+    if (navigator.onLine) {
+      processOfflineQueue();
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [processOfflineQueue]);
+
+  // =========================================================================
+  // 2. SUPABASE DIRECT CLOUD FETCH (CROSS-DEVICE: PC <-> MOBILE)
   // =========================================================================
   const syncWithCloud = useCallback(async () => {
+    if (!navigator.onLine) {
+      setIsDataLoading(false);
+      return;
+    }
+
     try {
       // 1. Fetch Global Groups from Supabase
       const cloudGroups = await fetchCloudGroups();
@@ -128,7 +218,9 @@ export function DataProvider({ children }) {
     };
   }, [syncWithCloud]);
 
-  // ---- ROUTINES ACTIONS (DIRECT SUPABASE PERSISTENCE) ----
+  // =========================================================================
+  // 3. ROUTINES ACTIONS (WITH REORDERING & DIRECT CLOUD / OFFLINE PERSISTENCE)
+  // =========================================================================
   const addRoutine = useCallback(async (routine) => {
     const newRoutine = {
       id: generateId(),
@@ -141,39 +233,51 @@ export function DataProvider({ children }) {
     setRoutines(updated);
 
     if (user?.id) {
-      const res = await syncRoutinesToCloud(user.id, updated);
-      if (!res) {
-        console.error('Falha ao salvar nova rotina no Supabase.');
+      if (navigator.onLine) {
+        const res = await syncRoutinesToCloud(user.id, updated);
+        if (!res) {
+          addToOfflineQueue({ type: 'routines', userId: user.id, payload: updated });
+        }
+      } else {
+        addToOfflineQueue({ type: 'routines', userId: user.id, payload: updated });
       }
     }
     return newRoutine;
-  }, [routines, user?.id]);
+  }, [routines, user?.id, addToOfflineQueue]);
 
   const updateRoutine = useCallback(async (id, updates) => {
     const updated = routines.map(r => r.id === id ? { ...r, ...updates } : r);
     setRoutines(updated);
 
     if (user?.id) {
-      const res = await syncRoutinesToCloud(user.id, updated);
-      if (!res) {
-        console.error('Falha ao atualizar rotina no Supabase.');
+      if (navigator.onLine) {
+        const res = await syncRoutinesToCloud(user.id, updated);
+        if (!res) {
+          addToOfflineQueue({ type: 'routines', userId: user.id, payload: updated });
+        }
+      } else {
+        addToOfflineQueue({ type: 'routines', userId: user.id, payload: updated });
       }
     }
     return updated;
-  }, [routines, user?.id]);
+  }, [routines, user?.id, addToOfflineQueue]);
 
   const deleteRoutine = useCallback(async (id) => {
     const updated = routines.filter(r => r.id !== id);
     setRoutines(updated);
 
     if (user?.id) {
-      const res = await syncRoutinesToCloud(user.id, updated);
-      if (!res) {
-        console.error('Falha ao deletar rotina no Supabase.');
+      if (navigator.onLine) {
+        const res = await syncRoutinesToCloud(user.id, updated);
+        if (!res) {
+          addToOfflineQueue({ type: 'routines', userId: user.id, payload: updated });
+        }
+      } else {
+        addToOfflineQueue({ type: 'routines', userId: user.id, payload: updated });
       }
     }
     return updated;
-  }, [routines, user?.id]);
+  }, [routines, user?.id, addToOfflineQueue]);
 
   const duplicateRoutine = useCallback(async (id) => {
     const original = routines.find(r => r.id === id);
@@ -188,12 +292,29 @@ export function DataProvider({ children }) {
     setRoutines(updated);
 
     if (user?.id) {
-      await syncRoutinesToCloud(user.id, updated);
+      if (navigator.onLine) {
+        await syncRoutinesToCloud(user.id, updated);
+      } else {
+        addToOfflineQueue({ type: 'routines', userId: user.id, payload: updated });
+      }
     }
     return updated;
-  }, [routines, user?.id]);
+  }, [routines, user?.id, addToOfflineQueue]);
 
-  // ---- CARDIO ROUTINES ACTIONS (DIRECT SUPABASE PERSISTENCE) ----
+  // Reorder exercises inside a saved routine
+  const reorderRoutineExercises = useCallback(async (routineId, newExercises) => {
+    const updated = routines.map(r => r.id === routineId ? { ...r, exercises: newExercises } : r);
+    setRoutines(updated);
+    if (user?.id) {
+      if (navigator.onLine) {
+        await syncRoutinesToCloud(user.id, updated);
+      } else {
+        addToOfflineQueue({ type: 'routines', userId: user.id, payload: updated });
+      }
+    }
+  }, [routines, user?.id, addToOfflineQueue]);
+
+  // ---- CARDIO ROUTINES ACTIONS ----
   const addCardioRoutine = useCallback(async (routine) => {
     const newRoutine = {
       id: generateId(),
@@ -212,10 +333,13 @@ export function DataProvider({ children }) {
     setCardioRoutines(updated);
 
     if (user?.id) {
-      await syncCardioRoutinesToCloud(user.id, updated);
+      if (navigator.onLine) {
+        await syncCardioRoutinesToCloud(user.id, updated);
+      } else {
+        addToOfflineQueue({ type: 'cardio', userId: user.id, payload: updated });
+      }
     }
 
-    // If scheduledDay is provided, also sync to weeklySchedule
     if (newRoutine.scheduledDay !== null && newRoutine.scheduledDay !== undefined) {
       const existing = weeklySchedule[newRoutine.scheduledDay] || { type: 'rest', label: 'Descanso' };
       const hasW = Boolean(existing.hasWorkout || existing.type === 'workout' || existing.type === 'both');
@@ -240,34 +364,48 @@ export function DataProvider({ children }) {
       };
       setWeeklySchedule(updatedSched);
       if (user?.id) {
-        await syncScheduleToCloud(user.id, updatedSched);
+        if (navigator.onLine) {
+          await syncScheduleToCloud(user.id, updatedSched);
+        } else {
+          addToOfflineQueue({ type: 'schedule', userId: user.id, payload: updatedSched });
+        }
       }
     }
 
     return newRoutine;
-  }, [cardioRoutines, weeklySchedule, user?.id]);
+  }, [cardioRoutines, weeklySchedule, user?.id, addToOfflineQueue]);
 
   const updateCardioRoutine = useCallback(async (id, updates) => {
     const updated = cardioRoutines.map(c => c.id === id ? { ...c, ...updates } : c);
     setCardioRoutines(updated);
 
     if (user?.id) {
-      await syncCardioRoutinesToCloud(user.id, updated);
+      if (navigator.onLine) {
+        await syncCardioRoutinesToCloud(user.id, updated);
+      } else {
+        addToOfflineQueue({ type: 'cardio', userId: user.id, payload: updated });
+      }
     }
     return updated;
-  }, [cardioRoutines, user?.id]);
+  }, [cardioRoutines, user?.id, addToOfflineQueue]);
 
   const deleteCardioRoutine = useCallback(async (id) => {
     const updated = cardioRoutines.filter(c => c.id !== id);
     setCardioRoutines(updated);
 
     if (user?.id) {
-      await syncCardioRoutinesToCloud(user.id, updated);
+      if (navigator.onLine) {
+        await syncCardioRoutinesToCloud(user.id, updated);
+      } else {
+        addToOfflineQueue({ type: 'cardio', userId: user.id, payload: updated });
+      }
     }
     return updated;
-  }, [cardioRoutines, user?.id]);
+  }, [cardioRoutines, user?.id, addToOfflineQueue]);
 
-  // ---- ACTIVE WORKOUT SESSION ----
+  // =========================================================================
+  // 4. ACTIVE WORKOUT SESSION & FINISH WITH OFFLINE SUPPORT
+  // =========================================================================
   const startActiveWorkout = useCallback((routine) => {
     const findPreviousSets = (exerciseName) => {
       for (const checkin of checkins) {
@@ -400,11 +538,18 @@ export function DataProvider({ children }) {
       }))
     };
 
-    // Save checkin in state and directly to Supabase cloud
     const updatedCheckins = [checkinData, ...checkins];
     setCheckins(updatedCheckins);
+
     if (user?.id) {
-      await syncCheckinsToCloud(user.id, updatedCheckins);
+      if (navigator.onLine) {
+        const res = await syncCheckinsToCloud(user.id, updatedCheckins);
+        if (!res) {
+          addToOfflineQueue({ type: 'checkins', userId: user.id, payload: updatedCheckins });
+        }
+      } else {
+        addToOfflineQueue({ type: 'checkins', userId: user.id, payload: updatedCheckins });
+      }
     }
 
     // Update routine notes if routine exists
@@ -421,11 +566,15 @@ export function DataProvider({ children }) {
       });
       setRoutines(updatedRoutines);
       if (user?.id) {
-        await syncRoutinesToCloud(user.id, updatedRoutines);
+        if (navigator.onLine) {
+          await syncRoutinesToCloud(user.id, updatedRoutines);
+        } else {
+          addToOfflineQueue({ type: 'routines', userId: user.id, payload: updatedRoutines });
+        }
       }
     }
 
-    // Auto post to user's joined groups feed if enabled and sync group to cloud
+    // Auto post to user's joined groups feed if enabled
     if (shareToGroup) {
       const updatedGroups = allGroups.map(g => {
         const isMember = g.members?.some(m => m.id === user?.id);
@@ -457,15 +606,19 @@ export function DataProvider({ children }) {
         return g;
       });
       setAllGroups(updatedGroups);
-      await syncGroupsToCloud(updatedGroups);
+      if (navigator.onLine) {
+        await syncGroupsToCloud(updatedGroups);
+      } else {
+        addToOfflineQueue({ type: 'groups', payload: updatedGroups });
+      }
     }
 
-    // Clear active workout
     setActiveWorkout(null);
+    showToast('Treino concluído e salvo com sucesso!', 'success');
     return checkinData;
-  }, [activeWorkout, user, checkins, routines, allGroups]);
+  }, [activeWorkout, user, checkins, routines, allGroups, addToOfflineQueue]);
 
-  // Log standalone or complementary Cardio (DIRECT SUPABASE PERSISTENCE)
+  // Log standalone or complementary Cardio
   const logCardio = useCallback(async ({
     date,
     durationMinutes = 30,
@@ -503,8 +656,13 @@ export function DataProvider({ children }) {
 
     const updatedCheckins = [checkinData, ...checkins];
     setCheckins(updatedCheckins);
+
     if (user?.id) {
-      await syncCheckinsToCloud(user.id, updatedCheckins);
+      if (navigator.onLine) {
+        await syncCheckinsToCloud(user.id, updatedCheckins);
+      } else {
+        addToOfflineQueue({ type: 'checkins', userId: user.id, payload: updatedCheckins });
+      }
     }
 
     if (shareToGroup) {
@@ -534,11 +692,16 @@ export function DataProvider({ children }) {
         return g;
       });
       setAllGroups(updatedGroups);
-      await syncGroupsToCloud(updatedGroups);
+      if (navigator.onLine) {
+        await syncGroupsToCloud(updatedGroups);
+      } else {
+        addToOfflineQueue({ type: 'groups', payload: updatedGroups });
+      }
     }
 
+    showToast('Cardio salvo com sucesso!', 'success');
     return checkinData;
-  }, [user, checkins, allGroups]);
+  }, [user, checkins, allGroups, addToOfflineQueue]);
 
   // Add Justified Absence
   const addJustifiedAbsence = useCallback(async ({ date, reason, action, newDate, routineName }) => {
@@ -555,8 +718,13 @@ export function DataProvider({ children }) {
 
     const updatedAbsences = [absenceItem, ...justifiedAbsences];
     setJustifiedAbsences(updatedAbsences);
+
     if (user?.id) {
-      await syncAbsencesToCloud(user.id, updatedAbsences);
+      if (navigator.onLine) {
+        await syncAbsencesToCloud(user.id, updatedAbsences);
+      } else {
+        addToOfflineQueue({ type: 'absences', userId: user.id, payload: updatedAbsences });
+      }
     }
 
     const updatedGroups = allGroups.map(g => {
@@ -586,10 +754,15 @@ export function DataProvider({ children }) {
     });
 
     setAllGroups(updatedGroups);
-    await syncGroupsToCloud(updatedGroups);
+    if (navigator.onLine) {
+      await syncGroupsToCloud(updatedGroups);
+    } else {
+      addToOfflineQueue({ type: 'groups', payload: updatedGroups });
+    }
 
+    showToast('Falta justificada registrada. Seu streak está protegido!', 'success');
     return absenceItem;
-  }, [user, justifiedAbsences, allGroups]);
+  }, [user, justifiedAbsences, allGroups, addToOfflineQueue]);
 
   // ---- CHECK-INS ----
   const addCheckin = useCallback(async (checkin) => {
@@ -605,21 +778,31 @@ export function DataProvider({ children }) {
     const updated = [newCheckin, ...checkins];
     setCheckins(updated);
     if (user?.id) {
-      await syncCheckinsToCloud(user.id, updated);
+      if (navigator.onLine) {
+        await syncCheckinsToCloud(user.id, updated);
+      } else {
+        addToOfflineQueue({ type: 'checkins', userId: user.id, payload: updated });
+      }
     }
     return newCheckin;
-  }, [user, checkins]);
+  }, [user, checkins, addToOfflineQueue]);
 
   const deleteCheckin = useCallback(async (id) => {
     const updated = checkins.filter(c => c.id !== id);
     setCheckins(updated);
     if (user?.id) {
-      await syncCheckinsToCloud(user.id, updated);
+      if (navigator.onLine) {
+        await syncCheckinsToCloud(user.id, updated);
+      } else {
+        addToOfflineQueue({ type: 'checkins', userId: user.id, payload: updated });
+      }
     }
     return updated;
-  }, [user?.id, checkins]);
+  }, [user?.id, checkins, addToOfflineQueue]);
 
-  // ---- GROUPS SYSTEM (DIRECT SUPABASE PERSISTENCE) ----
+  // =========================================================================
+  // 5. GROUPS SYSTEM & MANAGEMENT (PERMISSIONS, LEAVE, DELETE, PROMOTE, KICK)
+  // =========================================================================
   const createGroup = useCallback(async (groupData) => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let inviteCode = '';
@@ -633,6 +816,7 @@ export function DataProvider({ children }) {
       username: user?.username || 'atleta',
       avatar: user?.avatar || null,
       role: 'admin',
+      isCreator: true,
       weeklyGoal: user?.weeklyGoal || 4,
       weeklyCheckins: 0,
       streak: 0,
@@ -658,17 +842,20 @@ export function DataProvider({ children }) {
     const updatedGroups = [newGroup, ...allGroups.filter(g => g.id !== newGroup.id)];
     setAllGroups(updatedGroups);
 
-    // Sync to Supabase directly
-    await syncGroupsToCloud(updatedGroups);
+    if (navigator.onLine) {
+      await syncGroupsToCloud(updatedGroups);
+    } else {
+      addToOfflineQueue({ type: 'groups', payload: updatedGroups });
+    }
 
+    showToast(`Grupo "${newGroup.name}" criado com sucesso!`, 'success');
     return newGroup;
-  }, [user, allGroups]);
+  }, [user, allGroups, addToOfflineQueue]);
 
   const joinGroup = useCallback(async (rawInput, memberProfile, pin) => {
     if (!rawInput) return { success: false, error: 'Código de convite inválido.' };
 
     let cleaned = String(rawInput).trim();
-
     if (cleaned.includes('join=')) {
       cleaned = cleaned.split('join=')[1].split('&')[0];
     } else if (cleaned.includes('/groups/')) {
@@ -689,9 +876,8 @@ export function DataProvider({ children }) {
       joinedAt: new Date().toISOString()
     };
 
-    // Ensure we have freshest groups from cloud
-    const cloudGroups = await fetchCloudGroups();
-    const currentGroups = cloudGroups.length > 0 ? cloudGroups : allGroups;
+    const cloudGroups = navigator.onLine ? await fetchCloudGroups() : allGroups;
+    const currentGroups = (cloudGroups && cloudGroups.length > 0) ? cloudGroups : allGroups;
 
     let targetGroup = currentGroups.find(g => {
       const gCode = (g.inviteCode || '').toUpperCase();
@@ -718,11 +904,17 @@ export function DataProvider({ children }) {
     });
 
     setAllGroups(updatedGroups);
-    await syncGroupsToCloud(updatedGroups);
+    if (navigator.onLine) {
+      await syncGroupsToCloud(updatedGroups);
+    } else {
+      addToOfflineQueue({ type: 'groups', payload: updatedGroups });
+    }
 
+    showToast(`Você entrou no grupo "${targetGroup.name}"!`, 'success');
     return { success: true, group: targetGroup };
-  }, [user, allGroups]);
+  }, [user, allGroups, addToOfflineQueue]);
 
+  // Leave group (Membro sai do grupo)
   const leaveGroup = useCallback(async (groupId) => {
     if (!user?.id) return;
     const updatedGroups = allGroups.map(g => {
@@ -735,15 +927,109 @@ export function DataProvider({ children }) {
       return g;
     });
     setAllGroups(updatedGroups);
-    await syncGroupsToCloud(updatedGroups);
-  }, [user?.id, allGroups]);
+    if (navigator.onLine) {
+      await syncGroupsToCloud(updatedGroups);
+    } else {
+      addToOfflineQueue({ type: 'groups', payload: updatedGroups });
+    }
+    showToast('Você saiu do grupo.', 'info');
+  }, [user?.id, allGroups, addToOfflineQueue]);
 
+  // Delete group permanently (Criador exclui o grupo)
   const deleteGroup = useCallback(async (groupId) => {
     const updatedGroups = allGroups.filter(g => g.id !== groupId);
     setAllGroups(updatedGroups);
-    await syncGroupsToCloud(updatedGroups);
-  }, [allGroups]);
+    if (navigator.onLine) {
+      await syncGroupsToCloud(updatedGroups);
+    } else {
+      addToOfflineQueue({ type: 'groups', payload: updatedGroups });
+    }
+    showToast('Grupo excluído definitivamente.', 'info');
+  }, [allGroups, addToOfflineQueue]);
 
+  // Promote Member to Admin
+  const promoteMember = useCallback(async (groupId, memberId) => {
+    const updatedGroups = allGroups.map(g => {
+      if (g.id === groupId) {
+        const updatedMembers = (g.members || []).map(m => m.id === memberId ? { ...m, role: 'admin' } : m);
+        return { ...g, members: updatedMembers };
+      }
+      return g;
+    });
+    setAllGroups(updatedGroups);
+    if (navigator.onLine) {
+      await syncGroupsToCloud(updatedGroups);
+    } else {
+      addToOfflineQueue({ type: 'groups', payload: updatedGroups });
+    }
+    showToast('Membro promovido a Administrador!', 'success');
+  }, [allGroups, addToOfflineQueue]);
+
+  // Demote Member to regular Member
+  const demoteMember = useCallback(async (groupId, memberId) => {
+    const updatedGroups = allGroups.map(g => {
+      if (g.id === groupId) {
+        const updatedMembers = (g.members || []).map(m => m.id === memberId ? { ...m, role: 'member' } : m);
+        return { ...g, members: updatedMembers };
+      }
+      return g;
+    });
+    setAllGroups(updatedGroups);
+    if (navigator.onLine) {
+      await syncGroupsToCloud(updatedGroups);
+    } else {
+      addToOfflineQueue({ type: 'groups', payload: updatedGroups });
+    }
+    showToast('Administrador rebaixado a membro.', 'info');
+  }, [allGroups, addToOfflineQueue]);
+
+  // Kick / Remove Member from Group
+  const kickMember = useCallback(async (groupId, memberId) => {
+    const updatedGroups = allGroups.map(g => {
+      if (g.id === groupId) {
+        const updatedMembers = (g.members || []).filter(m => m.id !== memberId);
+        return { ...g, members: updatedMembers };
+      }
+      return g;
+    });
+    setAllGroups(updatedGroups);
+    if (navigator.onLine) {
+      await syncGroupsToCloud(updatedGroups);
+    } else {
+      addToOfflineQueue({ type: 'groups', payload: updatedGroups });
+    }
+    showToast('Membro removido do grupo.', 'info');
+  }, [allGroups, addToOfflineQueue]);
+
+  // Transfer Ownership of Group
+  const transferGroupOwnership = useCallback(async (groupId, newOwnerId) => {
+    const updatedGroups = allGroups.map(g => {
+      if (g.id === groupId) {
+        const updatedMembers = (g.members || []).map(m => {
+          if (m.id === newOwnerId) return { ...m, role: 'admin', isCreator: true };
+          if (m.id === user?.id) return { ...m, role: 'admin', isCreator: false };
+          return m;
+        });
+        return {
+          ...g,
+          createdBy: newOwnerId,
+          members: updatedMembers
+        };
+      }
+      return g;
+    });
+    setAllGroups(updatedGroups);
+    if (navigator.onLine) {
+      await syncGroupsToCloud(updatedGroups);
+    } else {
+      addToOfflineQueue({ type: 'groups', payload: updatedGroups });
+    }
+    showToast('Posse do grupo transferida com sucesso!', 'success');
+  }, [user?.id, allGroups, addToOfflineQueue]);
+
+  // =========================================================================
+  // 6. FEED COMMENTS & LIKES (WITH DIRECT CLOUD PERSISTENCE)
+  // =========================================================================
   const addGroupFeedItem = useCallback(async (groupId, feedItem) => {
     const item = {
       id: generateId(),
@@ -765,9 +1051,13 @@ export function DataProvider({ children }) {
     });
 
     setAllGroups(updatedGroups);
-    await syncGroupsToCloud(updatedGroups);
+    if (navigator.onLine) {
+      await syncGroupsToCloud(updatedGroups);
+    } else {
+      addToOfflineQueue({ type: 'groups', payload: updatedGroups });
+    }
     return item;
-  }, [user, allGroups]);
+  }, [user, allGroups, addToOfflineQueue]);
 
   const toggleFeedPostLike = useCallback(async (groupId, postId) => {
     if (!user?.id) return;
@@ -794,11 +1084,15 @@ export function DataProvider({ children }) {
     });
 
     setAllGroups(updatedGroups);
-    await syncGroupsToCloud(updatedGroups);
-  }, [user?.id, allGroups]);
+    if (navigator.onLine) {
+      await syncGroupsToCloud(updatedGroups);
+    } else {
+      addToOfflineQueue({ type: 'groups', payload: updatedGroups });
+    }
+  }, [user?.id, allGroups, addToOfflineQueue]);
 
   const addFeedPostComment = useCallback(async (groupId, postId, commentText) => {
-    if (!commentText.trim() || !user?.id) return;
+    if (!commentText || !commentText.trim() || !user?.id) return;
     const comment = {
       id: generateId(),
       userId: user.id,
@@ -825,8 +1119,13 @@ export function DataProvider({ children }) {
     });
 
     setAllGroups(updatedGroups);
-    await syncGroupsToCloud(updatedGroups);
-  }, [user, allGroups]);
+    if (navigator.onLine) {
+      await syncGroupsToCloud(updatedGroups);
+    } else {
+      addToOfflineQueue({ type: 'groups', payload: updatedGroups });
+    }
+    showToast('Comentário publicado!', 'success');
+  }, [user, allGroups, addToOfflineQueue]);
 
   // ---- MESSAGES SYSTEM ----
   const sendMessage = useCallback(async (groupId, messageData) => {
@@ -844,9 +1143,14 @@ export function DataProvider({ children }) {
     const updatedGroupMsgs = [...currentGroupMsgs, newMessage];
 
     setAllMessages(prev => [...prev.filter(m => m.groupId !== groupId), ...updatedGroupMsgs]);
-    await syncMessagesToCloud(groupId, updatedGroupMsgs);
+
+    if (navigator.onLine) {
+      await syncMessagesToCloud(groupId, updatedGroupMsgs);
+    } else {
+      addToOfflineQueue({ type: 'messages', groupId, payload: updatedGroupMsgs });
+    }
     return newMessage;
-  }, [user, allMessages]);
+  }, [user, allMessages, addToOfflineQueue]);
 
   const getGroupMessages = useCallback((groupId) => {
     return allMessages.filter(m => m.groupId === groupId);
@@ -856,9 +1160,13 @@ export function DataProvider({ children }) {
   const updateWeeklySchedule = useCallback(async (newSchedule) => {
     setWeeklySchedule(newSchedule);
     if (user?.id) {
-      await syncScheduleToCloud(user.id, newSchedule);
+      if (navigator.onLine) {
+        await syncScheduleToCloud(user.id, newSchedule);
+      } else {
+        addToOfflineQueue({ type: 'schedule', userId: user.id, payload: newSchedule });
+      }
     }
-  }, [user?.id]);
+  }, [user?.id, addToOfflineQueue]);
 
   // Filter groups user is currently a member of
   const myGroups = allGroups.filter(g => g.members?.some(m => m.id === user?.id));
@@ -875,10 +1183,12 @@ export function DataProvider({ children }) {
       activeWorkout,
       justifiedAbsences,
       isDataLoading,
+      isOnline,
       addRoutine,
       updateRoutine,
       deleteRoutine,
       duplicateRoutine,
+      reorderRoutineExercises,
       addCardioRoutine,
       updateCardioRoutine,
       deleteCardioRoutine,
@@ -895,12 +1205,17 @@ export function DataProvider({ children }) {
       joinGroup,
       leaveGroup,
       deleteGroup,
+      promoteMember,
+      demoteMember,
+      kickMember,
+      transferGroupOwnership,
       addGroupFeedItem,
       toggleFeedPostLike,
       addFeedPostComment,
       sendMessage,
       getGroupMessages,
-      syncWithCloud
+      syncWithCloud,
+      processOfflineQueue
     }}>
       {children}
     </DataContext.Provider>

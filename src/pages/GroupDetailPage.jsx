@@ -27,7 +27,13 @@ import {
   Zap,
   Award,
   Activity,
-  Ruler
+  Ruler,
+  Settings,
+  LogOut,
+  ShieldAlert,
+  ShieldCheck,
+  UserMinus,
+  Crown
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
@@ -49,6 +55,10 @@ export default function GroupDetailPage() {
     addFeedPostComment,
     leaveGroup,
     deleteGroup,
+    promoteMember,
+    demoteMember,
+    kickMember,
+    transferGroupOwnership,
     routines,
     checkins
   } = useData();
@@ -58,7 +68,7 @@ export default function GroupDetailPage() {
   // Tabs: 'feed' (Detalhes), 'ranking' (Classificações), 'members' (Membros), 'chat' (Bate-papo)
   const [activeTab, setActiveTab] = useState('feed');
   const [rankingPeriod, setRankingPeriod] = useState('weekly');
-  const [rankingCategory, setRankingCategory] = useState('consistency'); // 'consistency' | 'prs' | 'streak' | 'volume' | 'strength'
+  const [rankingCategory, setRankingCategory] = useState('consistency');
   const [volumeMuscleGroup, setVolumeMuscleGroup] = useState('Geral');
   const [strengthMuscleGroup, setStrengthMuscleGroup] = useState('Peito');
   const [chatInput, setChatInput] = useState('');
@@ -68,6 +78,7 @@ export default function GroupDetailPage() {
   // Modal inspection states
   const [selectedPost, setSelectedPost] = useState(null);
   const [selectedMember, setSelectedMember] = useState(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const chatBottomRef = useRef(null);
 
@@ -113,12 +124,71 @@ export default function GroupDetailPage() {
     }
   };
 
-  // Add Comment
-  const handleAddComment = (postId, e) => {
-    e.preventDefault();
+  // Add Comment (with reactive selectedPost update & direct Supabase cloud sync)
+  const handleAddComment = async (postId, e) => {
+    e?.preventDefault();
     if (!commentInput.trim() || !group?.id) return;
-    addFeedPostComment(group.id, postId, commentInput);
+    const text = commentInput.trim();
     setCommentInput('');
+
+    await addFeedPostComment(group.id, postId, text);
+
+    if (selectedPost && selectedPost.id === postId) {
+      const newComment = {
+        id: 'c_' + Date.now().toString(36),
+        userId: user?.id,
+        userName: user?.name || 'Atleta',
+        userAvatar: user?.avatar,
+        text,
+        date: new Date().toISOString()
+      };
+      setSelectedPost(prev => ({
+        ...prev,
+        comments: [...(prev.comments || []), newComment]
+      }));
+    }
+  };
+
+  // Group Management Handlers
+  const isCreator = group.createdBy === user?.id || (group.members || []).find(m => m.id === user?.id)?.isCreator;
+  const isCurrentUserAdmin = isCreator || (group.members || []).find(m => m.id === user?.id)?.role === 'admin';
+
+  const handleLeaveGroup = async () => {
+    if (confirm(`Tem certeza que deseja sair do grupo "${group.name}"?`)) {
+      await leaveGroup(group.id);
+      navigate('/groups');
+    }
+  };
+
+  const handleDeleteGroup = async () => {
+    if (confirm(`ATENÇÃO: Deseja realmente EXCLUIR o grupo "${group.name}" definitivamente? Esta ação não pode ser desfeita.`)) {
+      await deleteGroup(group.id);
+      navigate('/groups');
+    }
+  };
+
+  const handlePromoteMember = async (member, e) => {
+    e?.stopPropagation();
+    await promoteMember(group.id, member.id);
+  };
+
+  const handleDemoteMember = async (member, e) => {
+    e?.stopPropagation();
+    await demoteMember(group.id, member.id);
+  };
+
+  const handleKickMember = async (member, e) => {
+    e?.stopPropagation();
+    if (confirm(`Remover "${member.name}" do grupo?`)) {
+      await kickMember(group.id, member.id);
+    }
+  };
+
+  const handleTransferOwnership = async (member, e) => {
+    e?.stopPropagation();
+    if (confirm(`Deseja transferir a POSSE do grupo para "${member.name}"? Ele será o novo criador e dono.`)) {
+      await transferGroupOwnership(group.id, member.id);
+    }
   };
 
   // Copy code
@@ -477,10 +547,15 @@ export default function GroupDetailPage() {
           <h2 className="top-group-title">{group.name}</h2>
         </div>
 
-        <button className="top-invite-btn" onClick={handleCopyInviteCode} title="Copiar código">
-          {copiedCode ? <Check size={16} className="text-success" /> : <Copy size={16} />}
-          <span>{group.inviteCode}</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button className="top-invite-btn" onClick={handleCopyInviteCode} title="Copiar código">
+            {copiedCode ? <Check size={16} className="text-success" /> : <Copy size={16} />}
+            <span>{group.inviteCode}</span>
+          </button>
+          <button className="top-invite-btn" onClick={() => setIsSettingsOpen(true)} title="Configurações do Grupo" style={{ padding: '6px 10px' }}>
+            <Settings size={16} />
+          </button>
+        </div>
       </header>
 
       {/* Leader Comparison Pill matching Image 3 */}
@@ -674,14 +749,25 @@ export default function GroupDetailPage() {
 
                             <div className="feed-compact-right">
                               <span className="feed-compact-time">{formatTime(post.date)}</span>
-                              <button 
-                                className={`feed-compact-like-btn ${isLiked ? 'liked' : ''}`}
-                                onClick={(e) => handleToggleLike(post.id, e)}
-                                title={isLiked ? 'Descurtir' : 'Curtir'}
-                              >
-                                <Heart size={14} fill={isLiked ? '#ef4444' : 'none'} />
-                                {likesCount > 0 && <span className="like-count-badge">{likesCount}</span>}
-                              </button>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <button 
+                                  className={`feed-compact-like-btn ${isLiked ? 'liked' : ''}`}
+                                  onClick={(e) => handleToggleLike(post.id, e)}
+                                  title={isLiked ? 'Descurtir' : 'Curtir'}
+                                >
+                                  <Heart size={14} fill={isLiked ? '#ef4444' : 'none'} />
+                                  {likesCount > 0 && <span className="like-count-badge">{likesCount}</span>}
+                                </button>
+                                <button 
+                                  className="feed-compact-like-btn"
+                                  onClick={() => setSelectedPost(post)}
+                                  title="Ver comentários"
+                                  style={{ color: 'var(--text-tertiary)' }}
+                                >
+                                  <MessageSquare size={14} />
+                                  {post.comments?.length > 0 && <span className="like-count-badge">{post.comments.length}</span>}
+                                </button>
+                              </div>
                             </div>
                           </div>
                         );
@@ -725,18 +811,28 @@ export default function GroupDetailPage() {
                             </div>
                           </div>
 
-                          {/* Timestamp on right matching Image 3 */}
-                          <div className="feed-compact-right">
-                            <span className="feed-compact-time">{formatTime(post.date)}</span>
-                            <button 
-                              className={`feed-compact-like-btn ${isLiked ? 'liked' : ''}`}
-                              onClick={(e) => handleToggleLike(post.id, e)}
-                              title={isLiked ? 'Descurtir' : 'Curtir'}
-                            >
-                              <Heart size={14} fill={isLiked ? '#ef4444' : 'none'} />
-                              {likesCount > 0 && <span className="like-count-badge">{likesCount}</span>}
-                            </button>
-                          </div>
+                            <div className="feed-compact-right">
+                              <span className="feed-compact-time">{formatTime(post.date)}</span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <button 
+                                  className={`feed-compact-like-btn ${isLiked ? 'liked' : ''}`}
+                                  onClick={(e) => handleToggleLike(post.id, e)}
+                                  title={isLiked ? 'Descurtir' : 'Curtir'}
+                                >
+                                  <Heart size={14} fill={isLiked ? '#ef4444' : 'none'} />
+                                  {likesCount > 0 && <span className="like-count-badge">{likesCount}</span>}
+                                </button>
+                                <button 
+                                  className="feed-compact-like-btn"
+                                  onClick={() => setSelectedPost(post)}
+                                  title="Ver comentários"
+                                  style={{ color: 'var(--text-tertiary)' }}
+                                >
+                                  <MessageSquare size={14} />
+                                  {post.comments?.length > 0 && <span className="like-count-badge">{post.comments.length}</span>}
+                                </button>
+                              </div>
+                            </div>
                         </div>
                       );
                     })}
@@ -1145,6 +1241,65 @@ export default function GroupDetailPage() {
                       </strong>
                     </div>
                   </div>
+
+                  {/* Admin Actions for this member */}
+                  {isCurrentUserAdmin && !isCurrentUser && (
+                    <div 
+                      style={{ 
+                        display: 'flex', 
+                        flexWrap: 'wrap', 
+                        gap: 6, 
+                        borderTop: '1px solid var(--border-color)', 
+                        paddingTop: 8,
+                        marginTop: 2 
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {isCreator && (
+                        <>
+                          {member.role === 'admin' ? (
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              style={{ fontSize: '0.75rem', padding: '4px 8px', height: 'auto', color: 'var(--text-secondary)' }}
+                              onClick={(e) => handleDemoteMember(member, e)}
+                            >
+                              <ShieldCheck size={13} style={{ marginRight: 4 }} />
+                              Rebaixar para Membro
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              style={{ fontSize: '0.75rem', padding: '4px 8px', height: 'auto', color: '#eab308' }}
+                              onClick={(e) => handlePromoteMember(member, e)}
+                            >
+                              <ShieldCheck size={13} style={{ marginRight: 4 }} />
+                              Promover a Admin
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            style={{ fontSize: '0.75rem', padding: '4px 8px', height: 'auto', color: 'var(--accent)' }}
+                            onClick={(e) => handleTransferOwnership(member, e)}
+                          >
+                            <Crown size={13} style={{ marginRight: 4 }} />
+                            Transferir Posse
+                          </button>
+                        </>
+                      )}
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        style={{ fontSize: '0.75rem', padding: '4px 8px', height: 'auto', color: '#ef4444' }}
+                        onClick={(e) => handleKickMember(member, e)}
+                      >
+                        <UserMinus size={13} style={{ marginRight: 4 }} />
+                        Remover do Grupo
+                      </button>
+                    </div>
+                  )}
 
                   <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6, fontSize: '0.8125rem', color: 'var(--accent)', fontWeight: 600 }}>
                     <span>Ver Perfil & Treinos</span>
@@ -1595,6 +1750,78 @@ export default function GroupDetailPage() {
                   <span>🔒</span>
                   <span>As medidas corporais deste atleta são privadas.</span>
                 </div>
+              )}
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* GROUP SETTINGS / ACTIONS MODAL */}
+      {isSettingsOpen && (
+        <Modal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          title="Opções do Grupo"
+          size="md"
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ background: 'var(--bg-elevated)', padding: '12px 16px', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'var(--text-tertiary)', fontSize: '0.8125rem' }}>Nome do Grupo</span>
+                <strong style={{ color: 'var(--text-primary)' }}>{group.name}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'var(--text-tertiary)', fontSize: '0.8125rem' }}>Código de Convite</span>
+                <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent)' }}>{group.inviteCode}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'var(--text-tertiary)', fontSize: '0.8125rem' }}>Total de Membros</span>
+                <span style={{ color: 'var(--text-secondary)' }}>{enrichedMembers.length} atletas</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'var(--text-tertiary)', fontSize: '0.8125rem' }}>Sua Função</span>
+                <span style={{ fontWeight: 600, color: isCreator ? '#eab308' : isCurrentUserAdmin ? 'var(--accent)' : 'var(--text-secondary)' }}>
+                  {isCreator ? '👑 Criador / Dono' : isCurrentUserAdmin ? '🛡️ Administrador' : 'Membro'}
+                </span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <Button
+                variant="secondary"
+                fullWidth
+                icon={<Copy size={16} />}
+                onClick={handleCopyInviteCode}
+              >
+                {copiedCode ? 'Código Copiado!' : 'Copiar Código de Convite'}
+              </Button>
+
+              <Button
+                variant="ghost"
+                fullWidth
+                icon={<LogOut size={16} />}
+                style={{ color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.2)' }}
+                onClick={() => {
+                  setIsSettingsOpen(false);
+                  handleLeaveGroup();
+                }}
+              >
+                Sair do Grupo
+              </Button>
+
+              {isCreator && (
+                <Button
+                  variant="ghost"
+                  fullWidth
+                  icon={<ShieldAlert size={16} />}
+                  style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)' }}
+                  onClick={() => {
+                    setIsSettingsOpen(false);
+                    handleDeleteGroup();
+                  }}
+                >
+                  Excluir Grupo Definitivamente
+                </Button>
               )}
             </div>
           </div>

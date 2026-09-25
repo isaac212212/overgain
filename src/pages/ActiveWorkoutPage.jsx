@@ -16,7 +16,9 @@ import {
   Sparkles,
   Plus,
   StickyNote,
-  Dumbbell
+  Dumbbell,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
@@ -256,6 +258,38 @@ export default function ActiveWorkoutPage() {
     updateActiveWorkout({ exercises: updatedExercises });
   };
 
+  // Reorder exercises during live workout
+  const handleMoveExerciseUp = (idx) => {
+    if (idx <= 0 || !activeWorkout) return;
+    const updatedExercises = [...activeWorkout.exercises];
+    const temp = updatedExercises[idx - 1];
+    updatedExercises[idx - 1] = updatedExercises[idx];
+    updatedExercises[idx] = temp;
+    updateActiveWorkout({ exercises: updatedExercises });
+  };
+
+  const handleMoveExerciseDown = (idx) => {
+    if (!activeWorkout || idx >= activeWorkout.exercises.length - 1) return;
+    const updatedExercises = [...activeWorkout.exercises];
+    const temp = updatedExercises[idx + 1];
+    updatedExercises[idx + 1] = updatedExercises[idx];
+    updatedExercises[idx] = temp;
+    updateActiveWorkout({ exercises: updatedExercises });
+  };
+
+  // Remove exercise from live workout
+  const handleDeleteExercise = (idx) => {
+    if (!activeWorkout) return;
+    if (activeWorkout.exercises.length <= 1) {
+      alert('A sessão de treino deve ter no mínimo 1 exercício.');
+      return;
+    }
+    if (confirm(`Remover "${activeWorkout.exercises[idx]?.name}" do treino atual?`)) {
+      const updatedExercises = activeWorkout.exercises.filter((_, i) => i !== idx);
+      updateActiveWorkout({ exercises: updatedExercises });
+    }
+  };
+
   // Handle Photo selection
   const handlePhotoSelect = (e) => {
     const file = e.target.files[0];
@@ -489,9 +523,63 @@ export default function ActiveWorkoutPage() {
                 <span className="exercise-index-pill">#{eIdx + 1}</span>
                 <h3 className="exercise-name-text">{exercise.name}</h3>
               </div>
-              <button className="exercise-options-btn" aria-label="Opções do exercício">
-                <MoreVertical size={18} />
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button 
+                  type="button" 
+                  onClick={() => handleMoveExerciseUp(eIdx)}
+                  disabled={eIdx === 0}
+                  title="Mover para cima"
+                  style={{
+                    padding: '4px 7px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--border-color)',
+                    background: 'var(--bg-elevated)',
+                    color: eIdx === 0 ? 'var(--text-disabled)' : 'var(--text-primary)',
+                    cursor: eIdx === 0 ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    opacity: eIdx === 0 ? 0.35 : 1
+                  }}
+                >
+                  <ArrowUp size={14} />
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => handleMoveExerciseDown(eIdx)}
+                  disabled={eIdx === activeWorkout.exercises.length - 1}
+                  title="Mover para baixo"
+                  style={{
+                    padding: '4px 7px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--border-color)',
+                    background: 'var(--bg-elevated)',
+                    color: eIdx === activeWorkout.exercises.length - 1 ? 'var(--text-disabled)' : 'var(--text-primary)',
+                    cursor: eIdx === activeWorkout.exercises.length - 1 ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    opacity: eIdx === activeWorkout.exercises.length - 1 ? 0.35 : 1
+                  }}
+                >
+                  <ArrowDown size={14} />
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => handleDeleteExercise(eIdx)}
+                  title="Remover exercício do treino"
+                  style={{
+                    padding: '4px 7px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    color: '#ef4444',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
             </div>
 
             {/* MANDATORY FIELD: "Adicione notas aqui..." (Observações do Exercício) */}
